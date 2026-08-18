@@ -144,6 +144,25 @@ TARGETS: dict[str, Target] = {
 NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output")
 
 
+#: Tests that cannot be run against a compiled build, with the reason each is excused.
+#:
+#: There is exactly one, and it is a limitation of the *technique*, not of the wheel. The test
+#: proves that :func:`siarbuild.docs.readme_markdown` degrades to a sentence rather than a
+#: traceback when neither a source README nor package metadata is available, and it arranges that
+#: by substituting ``importlib.metadata.metadata``. Nuitka binds that at build time — verified
+#: against ``from ... import``, a module attribute lookup and ``importlib.import_module``, all
+#: three of which ignore the substitution once compiled — so the test cannot reach the code it is
+#: about. The behaviour itself is unchanged: a genuinely absent distribution still raises
+#: ``PackageNotFoundError`` into the same handler.
+#:
+#: Deselected by name and printed, never quietly skipped. A build that excuses a test without
+#: saying so reads as a build that ran it.
+UNRUNNABLE_COMPILED = (
+    ("test_docs.py::test_missing_readme_is_a_sentence_not_a_traceback",
+     "substitutes importlib.metadata.metadata, which Nuitka binds at build time"),
+)
+
+
 class BuildError(RuntimeError):
     """A stage failed. The message is meant to be the whole explanation."""
 
@@ -333,8 +352,12 @@ def compile_package(tree: Path, package: str, out: Path, nofollow: tuple[str, ..
 def build_wheel(tree: Path) -> Path:
     """Build one wheel from a source tree, without build isolation.
 
-    ``--no-isolation`` deliberately: isolation fetches the latest setuptools from the network
-    mid-release, which would make the artefact depend on the day it was built.
+    Built **in isolation**, which is a network dependency accepted on purpose. Both packages
+    declare ``requires = ["setuptools>=77"]`` because PEP 639's ``license`` string is not
+    understood by older releases, and that is the same environment a client's
+    ``pip install`` constructs. Building against whatever setuptools happens to be in the release
+    machine's environment would test a configuration nobody installs — and does not work here,
+    where it is 70.2.0 and rejects both files.
 
     The wheel this produces is a *source* wheel and is not what ships. It is built for its
     metadata — name, version, requirements, entry points, and the long description read out of
@@ -351,8 +374,12 @@ def build_wheel(tree: Path) -> Path:
         BuildError: If the build produces anything other than exactly one wheel.
     """
     outdir = tree / "_wheel"
-    run([sys.executable, "-m", "build", "--wheel", "--no-isolation", "--outdir", str(outdir)],
-        cwd=tree)
+    # Run from the tree's *parent*, naming the tree as an argument. `python -m build` with the
+    # tree as the working directory puts it first on sys.path, and siar-build ships a `build.py`
+    # at its root -- the one a client edits three values in and runs. `-m build` imports that
+    # instead of the packaging tool and evolves a model against whatever corpus it names.
+    run([sys.executable, "-m", "build", "--wheel", "--outdir", str(outdir), str(tree)],
+        cwd=tree.parent)
     wheels = sorted(outdir.glob("*.whl"))
     if len(wheels) != 1:
         raise BuildError(f"expected one wheel in {outdir}, found {[w.name for w in wheels]}")
@@ -530,13 +557,57 @@ def patch_siarbuild_pyproject(tree: Path, wheels: dict[str, str], base_url: str)
 # -- verification -----------------------------------------------------------------------------
 
 
+def external_requirements(wheels: list[Path], run_extra: bool = False) -> set[str]:
+    """The third-party requirements of a set of wheels, as pip arguments.
+
+    Read from ``METADATA`` rather than restated, so a dependency added to either package is
+    installed by the next verification without anybody remembering to come here.
+
+    Our own two are excluded: they are named by direct URL, and those URLs point at files that do
+    not exist until this build's output is pushed. A verification that tried to resolve them would
+    fail on every release and succeed only on the second attempt.
+
+    Args:
+        wheels: The wheels to read.
+        run_extra: Also take the ``run`` extra, which is what pulls in siar-app.
+
+    Returns:
+        Requirement strings, without markers.
+    """
+    out: set[str] = set()
+    for wheel in wheels:
+        with zipfile.ZipFile(wheel) as zf:
+            name = next(n for n in zf.namelist() if n.endswith(".dist-info/METADATA"))
+            for line in zf.read(name).decode().splitlines():
+                if not line.startswith("Requires-Dist:"):
+                    continue
+                req, _, marker = line.split(":", 1)[1].strip().partition(";")
+                req, marker = req.strip(), marker.strip()
+                if "extra ==" in marker and not (run_extra and 'extra == "run"' in marker):
+                    continue
+                # A direct URL is one of ours, with one exception: siar-app is public and its
+                # repository resolves, and the two tests that drive its loader are the closest
+                # this build gets to an end-to-end check. brahma's URL points into this build's
+                # own output, which does not exist until these files are pushed, so resolving it
+                # would fail on every release and succeed only on the second attempt.
+                if " @ " in req and not req.lower().startswith("siar-app"):
+                    continue
+                out.add(req)
+    return out
+
+
 def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
     """Install the finished wheels in a throwaway environment and exercise them.
 
     Answers the question the leak check cannot: whether what is left after compilation still runs.
-    The environment is created with system site packages so numpy, scipy and soundfile come from
-    this machine rather than the network, and the wheels go in with ``--no-deps`` — the point is
-    to exercise our code, not to re-test pip.
+
+    The environment is built from nothing. An earlier version inherited system site packages to
+    save fetching numpy, which is exactly the shortcut that makes such a check worthless: the
+    release machine has both libraries installed from source, one of them editable, and a
+    verification that can reach them is not testing the wheels. So third-party requirements are
+    read out of the wheels' own metadata and installed from PyPI, and ours go in with
+    ``--no-deps`` — the URL dependency between them cannot resolve until these files are pushed,
+    and resolving it is not what is being checked.
 
     Args:
         wheels: The wheels to install.
@@ -550,8 +621,12 @@ def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
         BuildError: If installation, import or the suite fails.
     """
     venv = workdir / "verify-venv"
-    run([sys.executable, "-m", "venv", "--system-site-packages", str(venv)])
+    run([sys.executable, "-m", "venv", str(venv)])
     py = venv / "bin" / "python"
+
+    third_party = sorted(external_requirements(wheels, run_extra=tests is not None)
+                         | ({"pytest"} if tests else set()))
+    run([str(py), "-m", "pip", "install", "--quiet", *third_party])
     run([str(py), "-m", "pip", "install", "--no-deps", "--quiet", *[str(w) for w in wheels]])
 
     # Import what siar-build imports at module scope, and read the README back out of the wheel's
@@ -562,9 +637,9 @@ def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
         "from brahma_intelligence import BrahmaModel, ClassificationReport, apply_model,"
         " evolve_metric;"
         "from brahma_intelligence.store import Store;"
-        "from siarbuild.docs import readme;"
+        "from siarbuild.docs import readme_markdown;"
         "from siarbuild.vendor import VENDORED, RUNTIME;"
-        "n = len(readme());"
+        "n = len(readme_markdown());"
         "print(f'brahma {b.__version__}, readme {n} chars')"
     )
     summary = run([str(py), "-c", code]).strip()
@@ -573,8 +648,17 @@ def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
     run([str(venv / "bin" / "siar-build"), "--help"])
 
     if tests is not None:
-        out = run([str(py), "-m", "pytest", str(tests), "-q", "-p", "no:cacheprovider"],
-                  cwd=workdir)
+        # Selected by name with `-k`, not by node id with `--deselect`. A `--deselect` whose path
+        # does not match how pytest spells the node is accepted and does nothing: the run is
+        # green-looking and the excused test ran anyway, or -- as here -- it failed anyway while
+        # the build claimed to have excused it. `-k` also reports "N deselected" in the summary,
+        # so the exclusion appears in the same line as the result rather than only in this log.
+        names = [node.split("::")[-1] for node, _ in UNRUNNABLE_COMPILED]
+        for node, why in UNRUNNABLE_COMPILED:
+            print(f"  not run against the wheel: {node}\n    {why}")
+        expr = " and ".join(f"not {n}" for n in names)
+        out = run([str(py), "-m", "pytest", str(tests), "-q", "-p", "no:cacheprovider",
+                   "-k", expr], cwd=workdir)
         summary += "; " + out.strip().splitlines()[-1]
     return summary
 
