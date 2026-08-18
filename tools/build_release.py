@@ -691,6 +691,45 @@ def host_key() -> str:
     return key if key in TARGETS else ""
 
 
+def write_manifest(key: str, entry: dict, python_tag: str, base_url: str) -> Path:
+    """Record this platform's build in ``dist/RELEASE.json``, keeping the other platforms'.
+
+    Nuitka does not cross-build, so a release is assembled one machine at a time and the platforms
+    are written on different days. A manifest rebuilt from scratch by whichever machine ran last
+    would leave the earlier platform's wheels sitting in ``dist/`` with nothing recording what they
+    were built from — present, installable, and unaccounted for. So the file is a map keyed by
+    platform, and a build replaces its own row and reads the rest back out.
+
+    Args:
+        key: The :data:`TARGETS` key this build is for.
+        entry: This platform's record — sources, wheels, verification.
+        python_tag: The ABI every row shares.
+        base_url: Where ``dist/`` is served from.
+
+    Returns:
+        The path written.
+    """
+    path = DIST / "RELEASE.json"
+    platforms: dict[str, dict] = {}
+    if path.exists():
+        old = json.loads(path.read_text(encoding="utf-8"))
+        platforms = old.get("platforms", {})
+        # A manifest from before this file was a map: one platform, spelled at the top level.
+        if not platforms and "platform" in old:
+            platforms = {old["platform"]: {k: old[k] for k in ("verified", "sources", "wheels")
+                                           if k in old}}
+    platforms[key] = entry
+
+    manifest = {
+        "python_tag": python_tag,
+        "engine": "nuitka",
+        "base_url": base_url,
+        "platforms": dict(sorted(platforms.items())),
+    }
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
 def main(argv: list[str] | None = None) -> int:
     """Build the release. See the module docstring."""
     ap = argparse.ArgumentParser(description="Build the siar-dist download.")
@@ -769,19 +808,13 @@ def main(argv: list[str] | None = None) -> int:
             release.verified = verify([DIST / n for n in release.wheels], work, tests)
             print(f"  {release.verified}")
 
-        manifest = {
-            "python_tag": PYTHON_TAG,
-            "platform": key,
-            "engine": "nuitka",
+        write_manifest(key, {
             "verified": release.verified,
-            "base_url": args.base_url,
             "sources": {s.name: {"commit": s.commit, "dirty": s.dirty}
                         for s in release.sources},
             "wheels": {n: hashlib.sha256((DIST / n).read_bytes()).hexdigest()
                        for n in release.wheels},
-        }
-        (DIST / "RELEASE.json").write_text(json.dumps(manifest, indent=2) + "\n",
-                                           encoding="utf-8")
+        }, PYTHON_TAG, args.base_url)
 
         print("\ndist/")
         for n in release.wheels:

@@ -1,21 +1,24 @@
 {
   "python_tag": "cp313",
-  "platform": "linux-x86_64",
   "engine": "nuitka",
-  "verified": "brahma 0.1.0, readme 106145 chars; 713 passed, 1 deselected in 104.56s (0:01:44)",
   "base_url": "https://raw.githubusercontent.com/energy-master/siar-dist/main/dist",
-  "sources": {
-    "brahma_lib_py": {
-      "commit": "12da37ba685a91274fbdbb3f9c46c86e0b6d8e66",
-      "dirty": false
-    },
-    "siar-build": {
-      "commit": "32d78bac5bfab8fdf007d50199760a785487010e",
-      "dirty": false
+  "platforms": {
+    "linux-x86_64": {
+      "verified": "brahma 0.1.0, readme 106145 chars; 713 passed, 1 deselected in 104.56s (0:01:44)",
+      "sources": {
+        "brahma_lib_py": {
+          "commit": "12da37ba685a91274fbdbb3f9c46c86e0b6d8e66",
+          "dirty": false
+        },
+        "siar-build": {
+          "commit": "32d78bac5bfab8fdf007d50199760a785487010e",
+          "dirty": false
+        }
+      },
+      "wheels": {
+        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "f152308b0ddec6146e35a11e5b6c170616706a796d748729ba8684c3bf8d61d9",
+        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "48db0ae7a1fe09bf5eb976dd7d2f69422d05a541b182a7ba6c373169003080e8"
+      }
     }
-  },
-  "wheels": {
-    "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "f152308b0ddec6146e35a11e5b6c170616706a796d748729ba8684c3bf8d61d9",
-    "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "48db0ae7a1fe09bf5eb976dd7d2f69422d05a541b182a7ba6c373169003080e8"
   }
 }
