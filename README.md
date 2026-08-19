@@ -1,72 +1,728 @@
 # siar-dist
 
-The download for **siar-build** — build SIaR detection models from your own labelled audio, and
-run them in siar-app.
+Signal Intelligence and Reconnaissance (SIaR) Framework from Vixen Intelligence. c. 2026
 
-This repository holds built wheels and nothing else. The source lives elsewhere and is not
-public; what is published here is compiled.
+The download for the two programs: **siar-app** runs detection models over folders of recordings,
+and **siar-build** breeds new ones from your own labelled audio.
+
+This repository holds built wheels and nothing else. The sources are private; what is published
+here is compiled.
+
+> The full manual ships inside each install. `siar-app readme` opens siar-app's in a browser and
+> `siar-build readme` opens siar-build's. This page is how to get started, and a reference for
+> every command at the end.
+
+---
 
 ## Install
 
 The wheels are native extensions built against the CPython **3.13** ABI, and carry a
-`requires-python` that refuses anything else rather than failing later at import. You do not need
-a 3.13 on the machine already: [uv](https://docs.astral.sh/uv/) will fetch one for the
-environment it creates, which is why the instructions below use it rather than pip.
+`requires-python` that refuses anything else rather than failing later at import. You do not need a
+3.13 on the machine already: [uv](https://docs.astral.sh/uv/) fetches one for the environment it
+creates, which is why these instructions use it rather than pip.
 
 ```bash
-curl -LsSf https://astral.sh/uv/install.sh | sh
+curl -LsSf https://astral.sh/uv/install.sh | sh   # or: brew install uv
 ```
 
-### To build models
+### Pick the wheels for your machine
 
-`uv tool install` puts `siar-build` on the PATH as a standalone command, in its own environment
-with its own 3.13:
+A direct URL cannot select a wheel by tag the way an index would, so the platform is named in the
+filename you install. Set the base once:
 
 ```bash
-uv tool install --python 3.13 \
-  https://raw.githubusercontent.com/energy-master/siar-dist/main/dist/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl
+BASE=https://raw.githubusercontent.com/energy-master/siar-dist/main/dist
 
-siar-build --help
+APP=$BASE/siar_app-0.7.0-cp313-cp313-linux_x86_64.whl
+BUILD=$BASE/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl
 ```
 
-`brahma-intelligence` resolves automatically — it is named by URL in the wheel's metadata, with a
-marker so the right platform's build is chosen.
+Only Linux x86_64 is published today — see [Platforms](#platforms).
 
-### To also run the finished model
+### Which install you want
 
-`siar-build verify` and `siar-build scan` shell out to `siar-app`, so they need it **on the
-PATH** — not merely installed alongside. `uv tool install` exposes only the requested package's
-own command, so the `[run]` extra wants a virtual environment you activate instead:
+**Just running models — most people.** `uv tool install` puts `siar-app` on the PATH as a
+standalone command in its own environment, with its own 3.13:
+
+```bash
+uv tool install --python 3.13 "$APP"
+```
+
+**Building models too.** `siar-build verify`, `siar-build scan`, `siar-build soc scan` and every
+`siar-app` command need `siar-app` **on the PATH**, so use a virtual environment you activate:
 
 ```bash
 uv venv --python 3.13
 source .venv/bin/activate
 
-uv pip install "siar-build[run] @ https://raw.githubusercontent.com/energy-master/siar-dist/main/dist/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl"
+uv pip install "siar-build[run] @ $BUILD"
 ```
 
-That puts `siar-build` and `siar-app` both on the PATH for as long as the environment is active.
-Installing the extra as a tool instead leaves `siar-app` inside the tool's environment, where
-`verify` and `scan` cannot see it and report it as missing even though it is there.
+That puts `siar-build` **and** `siar-app` on the PATH for as long as the environment is active.
+The `[run]` extra names siar-app's wheel by URL, so nothing else has to be fetched by hand.
+
+**Building only, never running.** If this box breeds models and something else scans with them:
+
+```bash
+uv tool install --python 3.13 "$BUILD"
+```
+
+`brahma-intelligence` resolves automatically in every case — it is named by URL in siar-build's
+metadata, with a marker that picks the right platform's build.
+
+> Installing the `[run]` extra as a *tool* does not work: `uv tool install` exposes only the
+> requested package's own command, so `siar-app` stays inside the tool's environment where
+> `verify` and `scan` cannot see it and report it missing even though it is there. Install the two
+> as separate tools, or use the venv above.
+
+### Check it
+
+```bash
+siar-app --help
+siar-build --help    # only if you installed siar-build
+```
+
+---
+
+## Update
+
+The URLs are fixed to `main`, so a new release appears at the same filename. Reinstall with
+`--force` rather than relying on an upgrade to notice:
+
+```bash
+uv tool install --force --python 3.13 "$APP"        # tool install
+uv pip install --reinstall "siar-build[run] @ $BUILD"   # inside the venv
+```
+
+Nothing you have built or scanned is touched by an update. Models, societies, output folders and
+the local indexes all live outside the install.
+
+## Remove
+
+```bash
+uv tool uninstall siar-app       # tool install
+uv tool uninstall siar-build
+rm -rf .venv                     # venv install (deactivate first)
+```
+
+That removes the programs and leaves your work alone. What stays behind, to delete by hand only if
+you mean it:
+
+| path | what it is |
+|---|---|
+| `~/.siar-app/` | the cached IDent Dynamics token, downloaded algorithm bundles, imported models |
+| `~/.siar-build/` | this machine's build index and its societies' configuration |
+| your `--out` folders | the scans, societies and models themselves — the actual work |
+
+---
+
+## Quick start — scan a folder
+
+### The screen
+
+Everything this machine can run, the bots and features behind each, then an input, an output and
+Enter:
+
+```bash
+siar-app lib        # also what bare `siar-app` opens
+```
+
+It lists the algorithm bundles downloaded here and the models built here with siar-build, side by
+side. Keys: `↑↓` select, `tab` switch pane, `i` input folder, `o` output folder, `p` worker count,
+`enter` edit or run, `R` reload, `q` quit. It needs a terminal.
+
+### The command line
+
+Look at the folder first. This reads headers only, so a multi-GB corpus is summarised in a second
+and a mixed sample rate is caught before a long run rather than during one:
+
+```bash
+siar-app scan ~/audio/survey
+```
+
+Then run a model over it. Either one your account can download:
+
+```bash
+siar-app login                      # once; writes ~/.siar-app/credentials.json
+siar-app algorithms                 # the catalogue your super user has published
+siar-app run ~/audio/survey -a sonar-recall --out ~/scans/survey_sonar
+```
+
+…or one straight off disk, which needs no login and is the fastest way to try something just bred:
+
+```bash
+siar-app run ~/audio/survey \
+  --algorithm-path ~/siar-soc/sonar_big/socs/NAME \
+  --out ~/scans/survey_sonar
+```
+
+Useful flags on a real corpus: `--parallel` to scan several recordings at once, one process each;
+`--tui` to draw the whole run in one live panel; `--limit N` for a trial pass over a big folder;
+`--resume` to pick up where an interrupted run stopped; `--link` to hardlink the audio instead of
+copying it. The analysis grid and the algorithm's own parameters can be overridden — `--fft`,
+`--hop`, `--fmin`, `--fmax`, `--param NAME=VALUE` — but the defaults come from the algorithm and
+are usually what it was calibrated with.
+
+### Read the results
+
+`siar-app run` writes an output folder holding the audio, one structures sidecar per recording and
+a spectrogram thumbnail per lane. **Open that folder in IDent Dynamics** (goident.ai) to work
+through the detections.
+
+If the scan ran on a headless box, serve the folder read-only and look at it through an ssh tunnel
+— the command prints the exact tunnel line:
+
+```bash
+siar-app serve ~/scans/survey_sonar
+```
+
+`siar-app runs` lists the scans run from this machine, `siar-app installed` what is cached locally,
+and `siar-app feedback NAME -s 7` tells whoever published an algorithm how it did on your audio.
+
+### Move a model to another machine
+
+```bash
+siar-app export NAME --out sonar.siarmodel
+siar-app import sonar.siarmodel      # on the other machine
+```
+
+It lands in that machine's workspace, appears in `siar-app lib`, and is runnable with
+`siar-app run -a NAME`. Downloaded algorithms cannot be exported — they are licensed per machine.
+
+---
+
+## Quick start — breed a society
+
+A **society** is one long-running search for one target. It keeps breeding bots, ranks every one it
+has ever bred on audio no search ever trained on, and publishes the top of that leaderboard as a
+single model that fires where *k* of them agree.
+
+Your input is a folder of recordings, each with a `<stem>_labels.json` sidecar.
+
+```bash
+siar-build soc start ~/audio/sonar_big \
+  --target sonar \
+  --out ~/siar-soc/sonar_big
+```
+
+It returns as soon as the society is up, and keeps running when you close the terminal. Useful
+options: `--name` to name it, `--top N` for how many bots vote in the published model (default 20),
+`--min-recall X` when a miss costs more than a false alarm.
+
+### Watch it
+
+```bash
+siar-build soc              # the screen — bare `soc` opens it
+siar-build soc list         # every society, and whether it is alive
+siar-build soc status NAME  # one in detail, with its leaderboard
+siar-build soc genes NAME   # what the expressions are made of, and what selection is doing
+```
+
+Control it with `siar-build soc pause NAME`, `resume`, and `stop NAME` (which waits for the running
+searches to land; `--now` throws their work away).
+
+---
+
+## See the results
+
+Two different things get published, and neither implies the other.
+
+### The run — what the society *did*
+
+```bash
+siar-build soc share NAME
+```
+
+Publishes the society's history, gene counts and heartbeat to IDent Dynamics and prints a link that
+shows it **live to anyone, with no account and no tunnel**. It is the same link every time, so one
+already sent out keeps working across a stop and a restart. Note that what goes up includes every
+bot's evolved expression. Turn it off with `--revoke`; publishing again revives the same link.
+
+To watch from a browser without publishing anything, serve it read-only over an ssh tunnel instead
+— the command prints the exact tunnel line:
+
+```bash
+siar-build serve
+```
+
+### The model — what the society *made*
+
+```bash
+siar-build soc publish NAME \
+  --title "Sonar recall — society of 20" \
+  --description "Bred on the sonar_big corpus, 96 kHz. Fires where 6 of 20 metrics agree."
+```
+
+This needs an IDent Dynamics login on the box — the same token `siar-app` uses, so nothing new has
+to be created:
+
+```bash
+siar-app login                       # writes ~/.siar-app/credentials.json
+export SIAR_APP_URL=https://goident.ai   # which installation, if not the one you logged in to
+```
+
+What goes up is the same `siar_<society>/` package that `siar-app run --algorithm-path` loads, so
+what runs on the server is what runs here. Read `report.txt` in the model folder before you publish.
+
+**Uploading is not releasing.** The model lands *unpublished*: you and the site's supers can run it
+immediately — which is the point of publishing from the build box — and a super user ticks it in
+**Admin → Society models** before anybody else gets it. That page is also where the description
+users read gets written, and no later publish overwrites a human's editing. Publish again whenever
+the society improves; a user always runs the latest.
+
+The argument is a name **or a path**, so a model folder copied off another machine publishes the
+same way.
+
+---
 
 ## Platforms
 
-| platform | wheel |
+| platform | wheels |
 |---|---|
-| Linux x86_64 (glibc) | ✅ |
-| macOS arm64 / x86_64 | on request |
+| Linux x86_64 (glibc) | ✅ published |
+| macOS 11+ arm64 (Apple Silicon) | on request |
+| macOS x86_64 (Intel) | on request |
 | Windows x86_64 | on request |
 
 Unlike an obfuscator, the compiler does not cross-build: each platform needs a machine of that
-kind, so a row is added when there is somewhere to build it. Alpine and other musl distributions
-are **not** covered by the Linux wheel and will fail at import.
+kind, so a row is filled in when there is somewhere to build it. `dist/RELEASE.json` is the
+authority on what is actually published — a platform with no row there has no release, whatever
+files happen to be sitting in `dist/`.
+
+Two consequences worth stating rather than discovering. Alpine and other musl distributions are
+**not** covered by the Linux wheel and will fail at import — that row needs its own build. And an
+Intel Mac, including a 3.13 running under Rosetta on Apple Silicon, will not take an arm64 wheel:
+it needs the `macosx_10_9_x86_64` row.
 
 ## What is in a release
 
-`dist/RELEASE.json` records the source commits each wheel was built from, their sha256, and what
-the build verified before publishing — the wheels are installed into a clean environment and the
-full test suite is run against them, not against the source they came from.
+`dist/RELEASE.json` records, for each platform, the source commits its three wheels were built
+from, their sha256, and what the build verified before publishing — the wheels are installed into a
+clean environment and both full test suites are run against them, not against the source they came
+from. Platforms are built on different machines on different days, so each build writes its own row
+and leaves the others standing.
+
+---
+
+# Command reference
+
+Every command and every option, as the programs themselves report them. `--help` on any command
+prints the same thing with more detail.
+
+## siar-app
+
+```
+siar-app [--version] [--server URL] <command> [options]
+```
+
+`--server URL` picks which IDent Dynamics install to talk to, and can be given globally or on any
+command that reaches the network; the default is the one you logged in to. With no command at all,
+`siar-app` opens the library screen.
+
+| command | what it does |
+|---|---|
+| `version` | print the package version and this machine's build tag |
+| `license` | show the licence, or accept it without a prompt |
+| `quick-start` | open the illustrated quickstart in your browser (`quickstart` also works) |
+| `readme` | open the full manual in your browser |
+| `lib` | browse what this machine can run, and start a scan from it (`library` also works) |
+| `signup` | create an IDent Dynamics account |
+| `login` | sign in and cache a token |
+| `logout` | forget the cached token on this machine |
+| `whoami` | show who the cached token belongs to |
+| `algorithms` | list the algorithms your account can download |
+| `installed` | list the bundles downloaded to this machine |
+| `feedback` | rate how well an algorithm performed, 0–9 |
+| `scan` | summarise a folder of recordings from headers alone |
+| `run` | scan a folder and build an output folder for the web app |
+| `serve` | browse an output folder in a browser, without copying it |
+| `export` | write a model built here to one file another machine can import |
+| `import` | unpack a model bundle exported from another machine |
+| `runs` | list the scans run from this machine |
+
+### `siar-app run FOLDER --out DIR`
+
+The one that does the work. `FOLDER` is a root of WAV/FLAC recordings.
+
+| option | meaning |
+|---|---|
+| `-a, --algorithm NAME` | which model (see `siar-app algorithms`) |
+| `-o, --out DIR` | output folder to create — **required** |
+| `--algorithm-path DIR` | run an unobfuscated algorithm package straight off disk; needs no login |
+| `--platform TAG` | download the build for this platform tag instead of this machine's |
+| `--refresh` | re-download the algorithm even if it is cached |
+| `--server URL` | IDent Dynamics install to talk to |
+
+Analysis grid — defaults come from the algorithm:
+
+| option | meaning |
+|---|---|
+| `--fft N` | FFT size, a power of two |
+| `--hop N` | hop in samples (default: fft/4) |
+| `--window {hann,hamming,blackman,rectangular}` | window function |
+| `--channel SEL` | `mix` (default), `left`, `right`, or a channel index |
+
+Algorithm parameters:
+
+| option | meaning |
+|---|---|
+| `--param NAME=VALUE` | set one algorithm parameter; repeatable |
+| `--fmin HZ` | low edge of the band to scan |
+| `--fmax HZ` | high edge of the band to scan |
+
+Output:
+
+| option | meaning |
+|---|---|
+| `--link` | hardlink the audio instead of copying it (same filesystem only) |
+| `--resume` | skip recordings already written to the output folder |
+| `--no-thumbnails` | skip the per-recording lane thumbnails |
+| `--limit N` | stop after N recordings — a trial run over a big corpus |
+| `--max-size SIZE` | skip recordings larger than this, so one enormous file cannot take the run's memory with it (default 550MB; `0` for no ceiling). Accepts KB, MB, GB or a plain byte count |
+| `--parallel [N]` | scan N recordings at once, one process each; bare `--parallel` uses every core this machine's memory will hold |
+| `--no-recursive` | only the top level of the folder |
+| `--tui` | draw the whole run in one live panel: progress, where the time is going, what is being found, and a row per worker |
+| `-q, --quiet` | no per-file progress |
+
+### `siar-app scan FOLDER`
+
+| option | meaning |
+|---|---|
+| `--no-recursive` | only the top level of the folder |
+
+### `siar-app serve [DIR]`
+
+Serves one output folder read-only over HTTP — `DIR` defaults to the most recent `siar-app run`.
+Binds loopback and requires a token; no route can change anything in the folder.
+
+| option | meaning |
+|---|---|
+| `--port N` | port to listen on (default 8420; `0` picks a free one) |
+| `--bind ADDR` | address to listen on (default 127.0.0.1 — the `ssh -L` end) |
+| `--allow-remote` | permit a `--bind` other than loopback, over plain HTTP |
+| `--token VALUE` | use this token instead of a fresh random one |
+| `--open` | also open the page in a browser on **this** machine |
+| `--no-audio` | refuse to serve the recordings themselves |
+| `--allow-origin ORIGIN` | let this web origin read the daemon; repeatable, none by default |
+| `-v, --verbose` | log one line per request |
+
+### `siar-app lib`
+
+No options. Keys: `↑↓` select, `tab` pane, `i` input, `o` output, `p` parallel, `enter` edit or
+run, `R` reload, `q` quit.
+
+### `siar-app signup`
+
+| option | meaning |
+|---|---|
+| `--email ADDRESS` | where the verification link is sent (prompted for if omitted) |
+| `--username NAME` | 3–64 characters: letters, digits, and `.` `_` `-` |
+| `--display-name NAME` | how your name appears in the app (default: your username). Pass an empty string to accept the default without a prompt |
+| `--server URL` | IDent Dynamics install to talk to |
+
+### `siar-app login [USERNAME]`
+
+`USERNAME` is a username or email, prompted for if omitted. Set `$SIAR_APP_PASSWORD` to avoid the
+password prompt in a script.
+
+| option | meaning |
+|---|---|
+| `--device LABEL` | how this machine is labelled in your account's token list |
+| `--server URL` | IDent Dynamics install to talk to |
+
+### `siar-app algorithms`
+
+| option | meaning |
+|---|---|
+| `--family NAME` | only models in this family (name or title) |
+| `--params` | also print each algorithm's tunable parameters |
+| `--json` | print the raw catalogue as JSON |
+| `--server URL` | IDent Dynamics install to talk to |
+
+### `siar-app installed`
+
+| option | meaning |
+|---|---|
+| `--check` | also ask the server whether a newer version is published |
+| `--json` | print the raw list as JSON |
+| `--server URL` | IDent Dynamics install to talk to |
+
+### `siar-app feedback [NAME]`
+
+`NAME` is a model from `siar-app installed`. One rating per person per build is kept; rating again
+replaces your last answer.
+
+| option | meaning |
+|---|---|
+| `-s, --score 0-9` | 0 found nothing useful, 9 found what was there and little else (prompted for if omitted) |
+| `-m, --comment TEXT` | a sentence on what it did well or badly |
+| `--mine` | list the ratings you have given instead of adding one |
+| `--server URL` | IDent Dynamics install to talk to |
+
+### `siar-app export [NAME]`
+
+With no name, lists what could be exported.
+
+| option | meaning |
+|---|---|
+| `--out PATH` | file to write, or a folder to write it into (default: `<name>-<version>.siarmodel` here) |
+
+### `siar-app import [FILE]`
+
+With no file, lists the models already imported here. Nothing in the bundle is executed.
+
+| option | meaning |
+|---|---|
+| `--into DIR` | unpack somewhere other than the workspace (not listed in `lib`) |
+| `--inspect` | print what the bundle says about itself and import nothing |
+
+### `siar-app runs`
+
+| option | meaning |
+|---|---|
+| `--limit N` | how many to list |
+| `--json` | print as JSON |
+
+### `siar-app license` / `readme`
+
+| option | meaning |
+|---|---|
+| `--accept` | (`license`) record acceptance and exit — for a script or a container |
+| `--text` | (`readme`) print it as Markdown instead of opening a browser |
+
+`version`, `logout`, `whoami` and `quick-start` take no options beyond `--server` where it applies.
+
+---
+
+## siar-build
+
+```
+siar-build [--version] <command> [options]
+```
+
+| command | what it does |
+|---|---|
+| `all` | prepare, evolve, package, verify and scan |
+| `prepare` | cut the labelled stream into a class-folder corpus |
+| `evolve` | search for a metric and measure it on unseen recordings |
+| `package` | turn the model into a package siar-app can run |
+| `verify` | prove the package computes what the search measured |
+| `scan` | run the model over the audio with siar-app |
+| `run-tui` | set up and watch a build on one screen |
+| `models` | list what this machine has built |
+| `name` | rename a model, on disk and in the index |
+| `forget` | remove a build from the index, leaving the model on disk |
+| `delete` | delete a model from disk, and its row with it |
+| `soc` | societies — keep breeding bots for one target and publish their vote |
+| `serve` | watch this machine's societies from a browser, over an ssh tunnel |
+| `readme` | open the manual in your browser |
+
+### The pipeline: `all`, `prepare`, `evolve`, `package`, `verify`, `scan`
+
+All six take the same `INPUT` — a folder of recordings, each with a `<stem>_labels.json` sidecar —
+and the same options, so a stage can be re-run on its own with the flags the whole run used.
+`all` and `scan` additionally take `--no-scan`.
+
+| option | meaning |
+|---|---|
+| `-t, --target TAG` | the label tag to detect — **required** |
+| `-o, --out DIR` | where the corpus, model and scans go — **required** |
+| `--name NAME` | what to call this run (default: a minted `<target>_<tag>_vxrun`). Bots are always named `<target>_<tag>_vxbot`. Pass a full bot name to continue a build that exists |
+| `--no-scan` | (`all`, `scan`) stop after verify; the model is still built and packaged |
+
+**Corpus:**
+
+| option | meaning |
+|---|---|
+| `--alias TAG` | another tag meaning the same thing; repeatable. `--alias none` for strictly the target tag |
+| `--max-label-seconds S` | cap how much audio one label contributes. Long context spans otherwise dominate the positive class by window count |
+| `--background-ratio X` | seconds of background per second of target (default 2) |
+| `--test-recordings N` | whole recordings kept unseen by the search entirely (default 2) |
+
+**Search:**
+
+| option | meaning |
+|---|---|
+| `--seed N` | random seed |
+| `--objective NAME` | what fitness measures |
+| `--selection NAME` | the selection strategy |
+| `--pop N` | population size |
+| `--generations N` | how many generations |
+| `--elite N` | how many of the best survive a generation unchanged (default 4). 0 lets a bad crossover lose the champion; large turns the search into a hill climb |
+| `--tournament K` | how many individuals a fitness tournament draws (default 5) — the selection pressure. 2 is nearly a random walk; 20 hands each generation to one lineage |
+| `--size-tournament K` | the size tournament `double_tournament` holds beside the fitness one (default 2) |
+| `--crossover W` | weight of subtree crossover (default 0.55). Weights are relative and normalised; 0 switches an operator off |
+| `--subtree-mutation W` | replace a subtree with a fresh random one (default 0.15) |
+| `--point-mutation W` | swap one node for another of the same arity (default 0.10) |
+| `--hoist-mutation W` | promote a subtree to the root (default 0.07) |
+| `--shrink-mutation W` | replace a subtree with a terminal (default 0.05) |
+| `--constant-tweak W` | nudge a constant (default 0.08) |
+| `--mutation-scale X` | how far a constant is nudged, in units of its own magnitude (default 0.15) |
+| `--max-nodes N` | hard cap on an individual's size (default 64) |
+| `--max-depth N` | hard cap on an individual's depth (default 8) |
+| `--parsimony HOW` | how size enters the comparison: `none`, `lexicographic` (default, scale-free) or `linear` |
+| `--parsimony-coeff X` | the coefficient for `--parsimony linear`, and only for it |
+| `--sharing SIGMA` | fitness-sharing radius (default 0, off). Above zero, individuals that score the same windows the same way split their fitness |
+| `--parallel [N]` | score each generation across N worker processes; bare `--parallel` uses every core. Wall clock only — same seed, same champion |
+| `--no-null-control` | skip the label-shuffle control. Not advised: it is the only check that the pipeline is not leaking |
+
+**Frontend** — derived from the corpus; override with care:
+
+| option | meaning |
+|---|---|
+| `--fft N` | FFT size |
+| `--hop N` | hop in samples |
+| `--delta-t MS` | how far apart the spectrogram's columns are, in milliseconds — the readable way to say `--hop`. Given without `--fft`, the FFT follows it at the same 75% overlap |
+| `--point-buffer MS` | how much audio either side of a **point** label is the event. Without it, a click corpus reports its labels and zero seconds of labelled audio |
+| `--n-bins N` | how many bands the analysed range is divided into — the width of the vector every bot reads (default 128). Above what the band's resolution can fill, the surplus are constant-zero columns |
+| `--time-op` | cut the corpus from the **neighbourhoods of labels** only, discarding audio far from anything anybody marked |
+| `--buffer-time S` | seconds either side of a label that `--time-op` keeps (default 5) |
+| `--window S` | analysis window; rounded to a whole even number of STFT hops |
+| `--fmin HZ` | bottom of the analysed band. Raising it to just below the target stops the search reaching for out-of-band session artefacts |
+| `--fmax HZ` | top of the analysed band. Everything above it is invisible |
+| `--raw-level` | do **not** normalise each window to unit RMS. Exposes the search to energy dominance |
+
+### `siar-build run-tui [INPUT]`
+
+| option | meaning |
+|---|---|
+| `-t, --target TAG` | pre-select the target tag |
+| `-o, --out DIR` | pre-fill the output root |
+
+### `siar-build models`
+
+| option | meaning |
+|---|---|
+| `-t, --target TAG` | only this target |
+| `--targets` | list the targets instead of the runs — what this machine has been taught to detect |
+| `-n, --limit N` | how many to list |
+| `--programs ID` | show one build's champion and runners-up instead of the listing |
+
+### `siar-build name ID NAME` · `forget [ID]` · `delete ID`
+
+| option | meaning |
+|---|---|
+| `--missing` | (`forget`) forget every build whose packaged model is no longer on this disk, instead of one by id |
+| `--scans` | (`delete`) delete the scan output folder as well |
+| `-y, --yes` | (`delete`) do not ask. Without this the folders are named and confirmed |
+
+### `siar-build serve [SOC]`
+
+Serves what the societies on this machine are writing, read-only, so IDent Dynamics' pedigree panel
+can play them live. `SOC` defaults to every society on this machine.
+
+| option | meaning |
+|---|---|
+| `--port N` | port to listen on (default 8421; `0` takes a free one) |
+| `--bind ADDR` | address to listen on (default 127.0.0.1 — the tunnel's end) |
+| `--allow-remote` | permit a non-loopback `--bind`. Plain HTTP, so anything on the path can read the token |
+| `--token VALUE` | use this token instead of minting one, for a link that survives a restart |
+| `--allow-origin ORIGIN` | a web origin allowed to read this daemon; repeatable. Defaults to `https://goident.ai` |
+| `-v, --verbose` | one line per request, with the token removed |
+
+### `siar-build readme`
+
+| option | meaning |
+|---|---|
+| `--text` | print it as Markdown instead of opening a browser |
+
+---
+
+## siar-build soc
+
+Bare `siar-build soc` opens the screen.
+
+| subcommand | what it does |
+|---|---|
+| `start` | start a society, detached |
+| `list` | every society, and whether it is alive |
+| `status` | one society in detail |
+| `genes` | what the society's expressions are made of, and what is surviving |
+| `share` | publish a society's run, or turn its public link off |
+| `publish` | send a society's **model** to IDent Dynamics, so it can be run there |
+| `stop` | ask a society to stop, and wait for it |
+| `pause` | stop a society starting new searches |
+| `resume` | let a paused society carry on |
+| `rattle` | shake a society that has stopped moving |
+| `scan` | run a society's published model over audio |
+| `forget` | remove a society from the index, leaving its searches alone |
+
+### `siar-build soc start INPUT`
+
+Takes the **search** and **frontend** groups above — pinned once, for every search this society
+ever runs — plus its own:
+
+| option | meaning |
+|---|---|
+| `-t, --target TAG` | the label tag to detect — **required** |
+| `-o, --out DIR` | where the society's work goes — **required** |
+| `--name NAME` | what to call the society (default: a minted `<target>_<tag>_vxsoc`) |
+| `--arena N` | whole recordings kept for ranking only, which no search ever trains on (default 2) |
+| `--unseen N` | whole recordings kept for reporting only — never trained on, never selected on (default 2) |
+| `--top N` | how many bots the published model votes with (default 20) |
+| `--min-recall X` | the share of the target's windows the published vote must find on the arena, 0 to 1 (default 0 — no floor). Set it when a miss costs more than a check |
+| `--allow-small-corpus` | run even when the corpus cannot supply all three splits. The arena is kept first; the reporting split is what goes |
+| `--seed-bots N` | how many of the society's best a new search starts from (default 8). 0 starts every search from noise, which is the honest control |
+| `--rounds N` | stop after this many selections (default: keep going) |
+| `--eval-dir DIR` | a folder of labelled recordings the **published model** is scored against, over and over. This is the curve that says whether the thing you ship is getting better |
+| `--eval-every MIN` | minutes between evaluations (default 10) |
+| `--no-eval-figures` | do not draw each evaluation as a picture of the corpus |
+| `--note TEXT` | why this society was started; recorded against it |
+| `--public` | publish this society as it runs, and print a link that shows it live to **anyone** — including every bot's evolved expression |
+| `--foreground` | run in this terminal instead of detaching |
+| `--parallel [off\|auto\|N]` | how many **searches** run at once — the society's nodes. Each is a separate lineage arriving in the same population |
+| `--workers [off\|auto\|N]` | cores **one** search spreads its generations across. Wall clock only. Leave `off` when running several nodes |
+| `--max-pop N` | how many bots the society holds (default 200). Intake beyond it culls the worst |
+| `--intake N` | how many of each evolution's best enter the society (default 5) |
+| `--assess-every N` | how many selections apart the whole-society overview is measured (default 5, 0 never). Output only |
+| `--explorers N` | how many nodes start from noise instead of from the society's members (default: a third) |
+| `--rattle-after N` | selections the published model may stand still before the society shakes itself (default 40, 0 never) |
+| `--rattle-for N` | how many selections one rattle lasts (default 5) |
+
+### `siar-build soc list` · `status SOC` · `genes SOC`
+
+| option | meaning |
+|---|---|
+| `-t, --target TAG` | (`list`) only societies for this target |
+| `--top N` | (`status`) how much of the leaderboard to print |
+| `--kind {feature,op,motif,all}` | (`genes`) which grain to print (default `all`) |
+| `--sort {frequency,differential}` | (`genes`) what the society holds, commonest first (default), or what its selection is pushing hardest |
+| `-n, --limit N` | (`genes`) how many genes to print. 0 prints all |
+| `--json` | (`genes`) print the whole count as JSON |
+
+### `siar-build soc share SOC`
+
+| option | meaning |
+|---|---|
+| `--revoke` | turn the link off. What was published is kept and stops being readable; publishing again revives the same link |
+| `--title TEXT` | what to call it on the shared page (default: the society's name) |
+
+### `siar-build soc publish SOC`
+
+`SOC` is a society name **or** a path to a model folder. Asks for the publishing account's own
+password rather than using this box's token — publishing is a person's act, not a daemon's.
+
+| option | meaning |
+|---|---|
+| `--title TEXT` | what to call it in the catalogue. Used only when the model is **new** — editing done on the site is never overwritten |
+| `--description TEXT` | what it is for, in a sentence. New models only, as `--title` |
+| `--login USER` | the account to publish as (username or email). Defaults to whoever `siar-app login` signed this box in as. Set `$SIAR_PUBLISH_PASSWORD` on a box that must publish unattended |
+| `--no-share-link` | do not record which published society this model came out of |
+
+### `siar-build soc stop SOC` · `scan SOC [INPUT]`
+
+| option | meaning |
+|---|---|
+| `--now` | (`stop`) do not wait for the running searches; their work is lost |
+| `-o, --out DIR` | (`scan`) where the scan goes |
+| `-k N` | (`scan`) how many members must agree; overrides the calibrated bar |
+
+`pause`, `resume`, `rattle` and `forget` take a society name and no options.
+
+---
 
 ## Licence
 
-Proprietary — Vixen Intelligence. See the licence carried in each wheel.
+`siar-build` and `brahma-intelligence` are proprietary — Vixen Intelligence. The `siar-app` command
+line is MIT; the scanning algorithms it downloads are proprietary and licensed separately. Each
+wheel carries its own licence file, and `siar-app license` prints siar-app's.

@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 # Vixen Intelligence c.2026
-"""Build the public siar-dist download from the current commits of siar-build and brahma_lib_py.
+"""Build the public siar-dist download from the current commits of siar-build, siar-app and brahma.
 
-This repository is the only public face of a product whose two source repositories are private and
-staying that way. What crosses the line is compiled: each package is put through Nuitka into a
+This repository is the only public face of a product whose three source repositories are private
+and staying that way. What crosses the line is compiled: each package is put through Nuitka into a
 single native extension module, and the wheels here contain that ``.so`` and no statements.
 
 Run it, and ``dist/`` holds what a client installs::
@@ -25,16 +25,19 @@ also turned out to be undemanding — brahma's 53 modules compile in thirteen se
 experiment.
 
 **The sidecar directory, and why it is not a leak.** Nuitka gives a compiled package a synthetic
-``__file__`` of ``<dir>/<package>/__init__.py`` — a path that need not exist, but *may*. Both
+``__file__`` of ``<dir>/<package>/__init__.py`` — a path that need not exist, but *may*. All three
 packages read files relative to it: siar-build loads ``template/*.tmpl`` and copies its own
 ``rms.py`` and ``scanner_core.py`` into every model it packages, and it copies eleven modules out
-of brahma for the same reason. So each wheel ships a directory of that name beside the ``.so``
-holding exactly those files, and every ``Path(__file__).parent / ...`` in either package resolves
-without a line of either being changed.
+of brahma for the same reason; siar-app opens the pages under ``local_web/`` that it serves to a
+browser. So each wheel ships a directory of that name beside the ``.so`` holding exactly those
+files, and every ``Path(__file__).parent / ...`` in any of the three resolves without a line of
+any of them being changed.
 
-Those thirteen files are readable, and that is not a concession: they are *already* shipped as
-readable source inside every generated model package, by design, because a model folder has to run
-on a survey machine that has siar-app and nothing else. Nothing that was hidden becomes visible.
+siar-app's are HTML, CSS and JavaScript, which a browser was always going to be handed and which
+compilation was never about. The thirteen Python files are readable too, and that is not a
+concession either: they are *already* shipped as readable source inside every generated model
+package, by design, because a model folder has to run on a survey machine that has siar-app and
+nothing else. Nothing that was hidden becomes visible.
 What the directory cannot do is change which code runs — a bare directory loses to an extension
 module in Python's import system, and a deliberately sabotaged copy placed there was ignored in
 favour of the compiled one. It is data that happens to be spelled in Python.
@@ -43,9 +46,10 @@ favour of the compiled one. It is data that happens to be spelled in Python.
 is not on that permitted list. That is the difference between having compiled the library and
 believing one has, and it runs on the artefact that ships rather than the tree it came from.
 
-**Why the dependency is a URL.** A ``git+https://`` reference *builds from source*: pointed at
-the private brahma repository it resolves for nobody, and were that repository opened it would
-hand over what this script exists to withhold. An index would resolve wheels properly, but pip
+**Why the dependencies are URLs.** A ``git+https://`` reference *builds from source*: pointed at
+the private brahma or siar-app repository it resolves for nobody, and were either repository
+opened it would hand over what this script exists to withhold. An index would resolve wheels
+properly, but pip
 cannot be told about one from ``pyproject.toml`` — only from its command line — so the documented
 pip install line would break while the uv line beside it kept working. Direct URLs with
 environment markers keep both commands flagless, at the price of a platform matrix written down
@@ -75,6 +79,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DIST = ROOT / "dist"
 
 DEFAULT_SIARBUILD = Path("/home/vixen/apps/siar-builder")
+DEFAULT_SIARAPP = Path("/home/vixen/apps/siar-app")
 DEFAULT_BRAHMA = Path("/home/vixen/apps/brahma_lib_py")
 
 #: Where ``dist/`` is served from. ``raw.githubusercontent.com`` serves committed bytes with no
@@ -146,7 +151,11 @@ NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output
 
 #: Tests that cannot be run against a compiled build, with the reason each is excused.
 #:
-#: There is exactly one, and it is a limitation of the *technique*, not of the wheel. The test
+#: Keyed by suite, because there are two of them and an excuse earned by one package's test is
+#: not an excuse for another's. Every entry is one limitation of the *technique*, not of the
+#: wheel, and each is a substitution the compiled call site cannot see.
+#:
+#: siar-build's is a test
 #: proves that :func:`siarbuild.docs.readme_markdown` degrades to a sentence rather than a
 #: traceback when neither a source README nor package metadata is available, and it arranges that
 #: by substituting ``importlib.metadata.metadata``. Nuitka binds that at build time — verified
@@ -155,12 +164,31 @@ NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output
 #: about. The behaviour itself is unchanged: a genuinely absent distribution still raises
 #: ``PackageNotFoundError`` into the same handler.
 #:
+#: siar-app's two are ``builtins.input``, and they fail *only in file order*: both pass when run
+#: alone. Nuitka caches a builtin at the compiled call site the first time it is reached, and
+#: ``test_empty_answer_at_a_required_prompt_stops`` is the first test in that file to prompt for
+#: anything — so its ``lambda: ""`` is what every later test's ``cmd_signup`` goes on calling,
+#: whatever ``builtins.input`` is set to by then. Confirmed by patching twice in one process and
+#: watching the second substitution be ignored, not inferred from the failure.
+#:
+#: The behaviour is again unchanged: nothing reassigns ``builtins.input`` in a real run, so what
+#: the cache holds is the real builtin. The prompt order these two pin is worth pinning, and it
+#: still is — against the source, where the suite passes whole.
+#:
 #: Deselected by name and printed, never quietly skipped. A build that excuses a test without
 #: saying so reads as a build that ran it.
-UNRUNNABLE_COMPILED = (
-    ("test_docs.py::test_missing_readme_is_a_sentence_not_a_traceback",
-     "substitutes importlib.metadata.metadata, which Nuitka binds at build time"),
-)
+UNRUNNABLE_COMPILED: dict[str, tuple[tuple[str, str], ...]] = {
+    "siar-build": (
+        ("test_docs.py::test_missing_readme_is_a_sentence_not_a_traceback",
+         "substitutes importlib.metadata.metadata, which Nuitka binds at build time"),
+    ),
+    "siar-app": (
+        ("test_signup.py::test_prompts_in_field_order_when_nothing_is_given",
+         "reassigns builtins.input after a compiled call site has already cached it"),
+        ("test_signup.py::test_no_tty_says_which_flags_to_pass",
+         "reassigns builtins.input after a compiled call site has already cached it"),
+    ),
+}
 
 
 class BuildError(RuntimeError):
@@ -352,12 +380,13 @@ def compile_package(tree: Path, package: str, out: Path, nofollow: tuple[str, ..
 def build_wheel(tree: Path) -> Path:
     """Build one wheel from a source tree, without build isolation.
 
-    Built **in isolation**, which is a network dependency accepted on purpose. Both packages
-    declare ``requires = ["setuptools>=77"]`` because PEP 639's ``license`` string is not
-    understood by older releases, and that is the same environment a client's
-    ``pip install`` constructs. Building against whatever setuptools happens to be in the release
-    machine's environment would test a configuration nobody installs — and does not work here,
-    where it is 70.2.0 and rejects both files.
+    Built **in isolation**, which is a network dependency accepted on purpose: each package names
+    its own ``requires``, and isolation is the same environment a client's ``pip install``
+    constructs. siar-build and brahma declare ``setuptools>=77`` because PEP 639's ``license``
+    string is not understood by older releases; siar-app, which predates that spelling, asks for
+    less. Building all three against whatever setuptools happens to be in the release machine's
+    environment would test a configuration nobody installs — and does not work here, where it is
+    70.2.0 and rejects two of the three files.
 
     The wheel this produces is a *source* wheel and is not what ships. It is built for its
     metadata — name, version, requirements, entry points, and the long description read out of
@@ -518,58 +547,96 @@ def patch_brahma_pyproject(tree: Path) -> None:
     path.write_text(text, encoding="utf-8")
 
 
-def patch_siarbuild_pyproject(tree: Path, wheels: dict[str, str], base_url: str) -> None:
-    """Replace siar-build's git dependency on brahma with per-platform wheel URLs.
+def url_requirements(name: str, wheels: dict[str, str], base_url: str) -> str:
+    """One ``"<name> @ <url> ; <marker>",`` line per platform, indented for a TOML array.
 
     Args:
-        tree: The exported siar-build tree, modified in place.
+        name: The distribution name to require.
         wheels: ``{platform key: wheel filename}`` for every platform built this run.
         base_url: Where those filenames are served from.
 
+    Returns:
+        The lines, each already terminated by a newline.
+    """
+    return "".join(
+        f'    "{name} @ {base_url}/{wheels[key]} ; {TARGETS[key].marker}",\n'
+        for key in sorted(wheels)
+    )
+
+
+def patch_siarbuild_pyproject(tree: Path, brahma: dict[str, str], siarapp: dict[str, str],
+                              base_url: str) -> None:
+    """Replace siar-build's two git dependencies with per-platform wheel URLs.
+
+    Both point at private repositories, and they fail differently. ``brahma-intelligence`` is a
+    hard dependency, so a stale reference fails every install loudly. ``siar-app`` sits in the
+    ``run`` extra, so a stale one there fails only the installs that asked to run models — which
+    is what the README tells most people to do, and the failure arrives as a resolver error about
+    a repository the client has never heard of.
+
+    Args:
+        tree: The exported siar-build tree, modified in place.
+        brahma: ``{platform key: wheel filename}`` for brahma, for every platform built this run.
+        siarapp: The same for siar-app.
+        base_url: Where those filenames are served from.
+
     Raises:
-        BuildError: If the dependency line is absent, which means siar-build's pyproject has been
-            restructured and this substitution would quietly ship a wheel that still depends on
-            the private repository.
+        BuildError: If either line is absent, which means siar-build's pyproject has been
+            restructured and this substitution would quietly ship a wheel that still depends on a
+            private repository.
     """
     path = tree / "pyproject.toml"
     text = path.read_text(encoding="utf-8")
-    pattern = r'^\s*"brahma-intelligence @ [^"]*",\n'
-    if not re.search(pattern, text, flags=re.M):
+
+    hard = r'^\s*"brahma-intelligence @ [^"]*",\n'
+    if not re.search(hard, text, flags=re.M):
         raise BuildError(
             "siar-build's pyproject has no `brahma-intelligence @ ...` line to replace. Rather "
             "than ship a wheel that still points at the private repository, this build stops."
         )
-
-    lines = "".join(
-        f'    "brahma-intelligence @ {base_url}/{wheels[key]} ; {TARGETS[key].marker}",\n'
-        for key in sorted(wheels)
-    )
     replacement = (
         "    # Compiled from a private source repository by siar-dist/tools/build_release.py and\n"
         "    # served as native wheels. One URL per platform, guarded by mutually exclusive\n"
         "    # markers: a direct reference cannot select a wheel by tag the way an index would,\n"
         "    # and an index cannot be named from this file in a way pip would read.\n"
-        + lines
+        + url_requirements("brahma-intelligence", brahma, base_url)
     )
-    path.write_text(re.sub(pattern, replacement, text, count=1, flags=re.M), encoding="utf-8")
+    text = re.sub(hard, replacement, text, count=1, flags=re.M)
+
+    extra = r'^run = \[\s*"siar-app @ [^"]*",?\s*\]\n'
+    if not re.search(extra, text, flags=re.M):
+        raise BuildError(
+            'siar-build\'s pyproject has no `run = ["siar-app @ ..."]` extra to replace. That '
+            "extra is what puts siar-app on the PATH for `verify` and `scan`, so shipping it "
+            "still pointing at the private repository would break the install the README tells "
+            "most people to do. This build stops."
+        )
+    text = re.sub(extra, "run = [\n" + url_requirements("siar-app", siarapp, base_url) + "]\n",
+                  text, count=1, flags=re.M)
+
+    path.write_text(text, encoding="utf-8")
 
 
 # -- verification -----------------------------------------------------------------------------
 
 
-def external_requirements(wheels: list[Path], run_extra: bool = False) -> set[str]:
+def external_requirements(wheels: list[Path]) -> set[str]:
     """The third-party requirements of a set of wheels, as pip arguments.
 
     Read from ``METADATA`` rather than restated, so a dependency added to either package is
     installed by the next verification without anybody remembering to come here.
 
-    Our own two are excluded: they are named by direct URL, and those URLs point at files that do
-    not exist until this build's output is pushed. A verification that tried to resolve them would
-    fail on every release and succeed only on the second attempt.
+    Our own three are excluded: they are named by direct URL, and those URLs point at files that
+    do not exist until this build's output is pushed. A verification that tried to resolve them
+    would fail on every release and succeed only on the second attempt, so they are installed
+    from disk with ``--no-deps`` and this function supplies everything else.
+
+    Extras are skipped whole, which is a change from when siar-app was a public git repository and
+    the ``run`` extra was the one place a real end-to-end dependency could be resolved from. It is
+    now a wheel built by this script, installed from disk beside the other two.
 
     Args:
         wheels: The wheels to read.
-        run_extra: Also take the ``run`` extra, which is what pulls in siar-app.
 
     Returns:
         Requirement strings, without markers.
@@ -583,20 +650,18 @@ def external_requirements(wheels: list[Path], run_extra: bool = False) -> set[st
                     continue
                 req, _, marker = line.split(":", 1)[1].strip().partition(";")
                 req, marker = req.strip(), marker.strip()
-                if "extra ==" in marker and not (run_extra and 'extra == "run"' in marker):
+                if "extra ==" in marker:
                     continue
-                # A direct URL is one of ours, with one exception: siar-app is public and its
-                # repository resolves, and the two tests that drive its loader are the closest
-                # this build gets to an end-to-end check. brahma's URL points into this build's
-                # own output, which does not exist until these files are pushed, so resolving it
-                # would fail on every release and succeed only on the second attempt.
-                if " @ " in req and not req.lower().startswith("siar-app"):
+                # A direct URL is one of ours, and every one of them points into this build's own
+                # output, which does not exist until these files are pushed. Resolving one would
+                # fail on every release and succeed only on the second attempt.
+                if " @ " in req:
                     continue
                 out.add(req)
     return out
 
 
-def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
+def verify(wheels: list[Path], workdir: Path, suites: dict[str, Path]) -> str:
     """Install the finished wheels in a throwaway environment and exercise them.
 
     Answers the question the leak check cannot: whether what is left after compilation still runs.
@@ -612,7 +677,8 @@ def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
     Args:
         wheels: The wheels to install.
         workdir: Where to put the environment.
-        tests: A test suite to run against the installed wheels, or ``None`` to only import.
+        suites: ``{source name: tests directory}`` to run against the installed wheels, empty to
+            only import. Each is run separately, against the wheel rather than its own tree.
 
     Returns:
         A one-line summary of what was checked.
@@ -624,42 +690,51 @@ def verify(wheels: list[Path], workdir: Path, tests: Path | None) -> str:
     run([sys.executable, "-m", "venv", str(venv)])
     py = venv / "bin" / "python"
 
-    third_party = sorted(external_requirements(wheels, run_extra=tests is not None)
-                         | ({"pytest"} if tests else set()))
+    third_party = sorted(external_requirements(wheels) | ({"pytest"} if suites else set()))
     run([str(py), "-m", "pip", "install", "--quiet", *third_party])
     run([str(py), "-m", "pip", "install", "--no-deps", "--quiet", *[str(w) for w in wheels]])
 
-    # Import what siar-build imports at module scope, and read the README back out of the wheel's
-    # own metadata -- which is the only place it can come from once there is no source tree, and
-    # therefore the thing most likely to have been lost in recomposition.
+    # Import what each package imports at module scope, and read both READMEs back out of the
+    # wheels' own metadata -- which is the only place they can come from once there is no source
+    # tree, and therefore the thing most likely to have been lost in recomposition. siar-app's
+    # quickstart page is checked as a file, because it is the sidecar directory in the same role:
+    # present in the source tree, easy to drop in recomposition, and missed only at the moment a
+    # client opens a browser.
     code = (
-        "import brahma_intelligence as b, siarbuild;"
+        "import brahma_intelligence as b, siarbuild, siarapp, os;"
         "from brahma_intelligence import BrahmaModel, ClassificationReport, apply_model,"
         " evolve_metric;"
         "from brahma_intelligence.store import Store;"
         "from siarbuild.docs import readme_markdown;"
         "from siarbuild.vendor import VENDORED, RUNTIME;"
+        "from siarapp import docs as appdocs;"
+        "from siarapp.cli.main import main;"
         "n = len(readme_markdown());"
-        "print(f'brahma {b.__version__}, readme {n} chars')"
+        "m = len(appdocs.readme_markdown());"
+        "assert os.path.isfile(appdocs.quickstart_path()), 'local_web sidecar missing';"
+        "print(f'brahma {b.__version__}, readme {n} chars, siar-app readme {m} chars,"
+        " local_web intact')"
     )
     summary = run([str(py), "-c", code]).strip()
-    # The console script, because it is what a client types and it is the one entry
-    # point that has to survive compilation -- `python -m siarbuild` no longer can.
+    # The console scripts, because they are what a client types and they are the entry points that
+    # have to survive compilation -- `python -m siarbuild` no longer can.
     run([str(venv / "bin" / "siar-build"), "--help"])
+    run([str(venv / "bin" / "siar-app"), "--help"])
 
-    if tests is not None:
+    for name, tests in suites.items():
         # Selected by name with `-k`, not by node id with `--deselect`. A `--deselect` whose path
         # does not match how pytest spells the node is accepted and does nothing: the run is
         # green-looking and the excused test ran anyway, or -- as here -- it failed anyway while
         # the build claimed to have excused it. `-k` also reports "N deselected" in the summary,
         # so the exclusion appears in the same line as the result rather than only in this log.
-        names = [node.split("::")[-1] for node, _ in UNRUNNABLE_COMPILED]
-        for node, why in UNRUNNABLE_COMPILED:
+        excused = UNRUNNABLE_COMPILED.get(name, ())
+        for node, why in excused:
             print(f"  not run against the wheel: {node}\n    {why}")
-        expr = " and ".join(f"not {n}" for n in names)
-        out = run([str(py), "-m", "pytest", str(tests), "-q", "-p", "no:cacheprovider",
-                   "-k", expr], cwd=workdir)
-        summary += "; " + out.strip().splitlines()[-1]
+        cmd = [str(py), "-m", "pytest", str(tests), "-q", "-p", "no:cacheprovider"]
+        if excused:
+            cmd += ["-k", " and ".join(f"not {node.split('::')[-1]}" for node, _ in excused)]
+        out = run(cmd, cwd=workdir)
+        summary += f"; {name}: " + out.strip().splitlines()[-1]
     return summary
 
 
@@ -734,6 +809,7 @@ def main(argv: list[str] | None = None) -> int:
     """Build the release. See the module docstring."""
     ap = argparse.ArgumentParser(description="Build the siar-dist download.")
     ap.add_argument("--siar-build", type=Path, default=DEFAULT_SIARBUILD)
+    ap.add_argument("--siar-app", type=Path, default=DEFAULT_SIARAPP)
     ap.add_argument("--brahma", type=Path, default=DEFAULT_BRAHMA)
     ap.add_argument("--base-url", default=DEFAULT_BASE_URL,
                     help="where dist/ is served from; baked into siar-build's metadata")
@@ -741,7 +817,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="build from working trees instead of HEAD, and say so in the manifest")
     ap.add_argument("--no-verify", action="store_true", help="skip the install-and-import check")
     ap.add_argument("--run-tests", action="store_true",
-                    help="also run siar-build's suite against the installed wheels (slow)")
+                    help="also run siar-build's and siar-app's suites against the wheels (slow)")
     ap.add_argument("--keep-work", action="store_true", help="leave the build directory behind")
     args = ap.parse_args(argv)
 
@@ -762,8 +838,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"work: {work}\nplatform: {key} ({TARGETS[key].wheel})\n")
 
         brahma = export(args.brahma, work / "brahma", "brahma_lib_py", args.allow_dirty)
+        siarapp = export(args.siar_app, work / "siar-app", "siar-app", args.allow_dirty)
         siarbuild = export(args.siar_build, work / "siar-build", "siar-build", args.allow_dirty)
-        release.sources = [brahma, siarbuild]
+        release.sources = [brahma, siarapp, siarbuild]
         for src in release.sources:
             print(f"  {src.name:<14} {src.commit[:12]}{'  (DIRTY)' if src.dirty else ''}")
 
@@ -788,10 +865,28 @@ def main(argv: list[str] | None = None) -> int:
         release.wheels.append(b_wheel.name)
         print(f"  {b_wheel.name}  leak check clean")
 
+        # Before siarbuild, because siar-build's `run` extra has to name the wheel this produces.
+        print("\ncompiling siarapp")
+        a_so = compile_package(siarapp.path, "siarapp", work / "obj-siarapp",
+                               ("numpy", "soundfile"))
+        # No .py sidecar at all: nothing in siar-app is copied into a generated package the way
+        # siar-build's runtime modules are. What has to stay readable is the local_web deck, which
+        # is served to a browser and was never Python.
+        a_keep = ("local_web/*",)
+        a_wheel = recompose(build_wheel(siarapp.path), "siarapp", a_so, a_keep, target.wheel)
+        leaks = leak_check(a_wheel, "siarapp", a_keep)
+        if leaks:
+            raise BuildError(f"{a_wheel.name} carries source it should not:\n  "
+                             + "\n  ".join(leaks[:20]))
+        shutil.copy2(a_wheel, DIST / a_wheel.name)
+        release.wheels.append(a_wheel.name)
+        print(f"  {a_wheel.name}  leak check clean")
+
         print("\ncompiling siarbuild")
         s_so = compile_package(siarbuild.path, "siarbuild", work / "obj-siarbuild",
                                ("numpy", "soundfile", "brahma_intelligence"))
-        patch_siarbuild_pyproject(siarbuild.path, {key: b_wheel.name}, args.base_url)
+        patch_siarbuild_pyproject(siarbuild.path, {key: b_wheel.name}, {key: a_wheel.name},
+                                  args.base_url)
         s_keep = (*runtime, "template/*.tmpl")
         s_wheel = recompose(build_wheel(siarbuild.path), "siarbuild", s_so, s_keep, target.wheel)
         leaks = leak_check(s_wheel, "siarbuild", s_keep)
@@ -804,8 +899,9 @@ def main(argv: list[str] | None = None) -> int:
 
         if not args.no_verify:
             print("\nverifying")
-            tests = siarbuild.path / "tests" if args.run_tests else None
-            release.verified = verify([DIST / n for n in release.wheels], work, tests)
+            suites = {"siar-build": siarbuild.path / "tests",
+                      "siar-app": siarapp.path / "tests"} if args.run_tests else {}
+            release.verified = verify([DIST / n for n in release.wheels], work, suites)
             print(f"  {release.verified}")
 
         write_manifest(key, {
@@ -820,7 +916,8 @@ def main(argv: list[str] | None = None) -> int:
         for n in release.wheels:
             print(f"  {n}  ({(DIST / n).stat().st_size // 1024} KiB)")
         print("  RELEASE.json")
-        print(f"\nInstall:\n  pip install {args.base_url}/{s_wheel.name}")
+        print(f"\nInstall:\n  pip install 'siar-build[run] @ {args.base_url}/{s_wheel.name}'"
+              f"\n  pip install {args.base_url}/{a_wheel.name}   # siar-app on its own")
         if any(s.dirty for s in release.sources):
             print("\nNOTE: built from a dirty tree. RELEASE.json records it. Do not ship it.")
         return 0

@@ -4,20 +4,25 @@
   "base_url": "https://raw.githubusercontent.com/energy-master/siar-dist/main/dist",
   "platforms": {
     "linux-x86_64": {
-      "verified": "brahma 0.1.0, readme 106145 chars; 713 passed, 1 deselected in 104.56s (0:01:44)",
+      "verified": "brahma 0.1.0, readme 106145 chars, siar-app readme 60769 chars, local_web intact; siar-build: 725 passed, 1 deselected in 49.24s; siar-app: 618 passed, 2 deselected in 11.60s",
       "sources": {
         "brahma_lib_py": {
           "commit": "12da37ba685a91274fbdbb3f9c46c86e0b6d8e66",
           "dirty": false
         },
+        "siar-app": {
+          "commit": "a274e628c973fdd6c68a2452cb627180a77e790b",
+          "dirty": false
+        },
         "siar-build": {
-          "commit": "32d78bac5bfab8fdf007d50199760a785487010e",
+          "commit": "c5f2916ad9a391337fb2b5024312536de6883792",
           "dirty": false
         }
       },
       "wheels": {
-        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "f152308b0ddec6146e35a11e5b6c170616706a796d748729ba8684c3bf8d61d9",
-        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "48db0ae7a1fe09bf5eb976dd7d2f69422d05a541b182a7ba6c373169003080e8"
+        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "875a7630e94c69ff53dac3eae64c872f2fe2fd0d3f6f115fabdbfba558f1651e",
+        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "cf45483e19874b0ef7d37c3fec955e94dd27552c996dcec2b2a3cb5ab6e6bc4e",
+        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "901477792c4271de5098b2a85eecb8e27b32c41cecba1139b1f903c424dc9334"
       }
     }
   }
