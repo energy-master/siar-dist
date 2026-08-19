@@ -3,3 +3,14 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
+
+# Assistant working files: notes, settings, memory and plans. A contribution to this repository is
+# a wheel and the JSON that names it; one person's working context is neither, and it travels with
+# whichever checkout produced the build rather than with the release.
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+MEMORY.md
+memory/
+plans/
+*.plan.md
