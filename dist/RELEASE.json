@@ -3,6 +3,28 @@
   "engine": "nuitka",
   "base_url": "https://raw.githubusercontent.com/energy-master/siar-dist/main/dist",
   "platforms": {
+    "darwin-arm64": {
+      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62640 chars, local_web intact; siar-build: 741 passed, 1 deselected in 24.48s; siar-app: 646 passed, 2 deselected in 7.20s",
+      "sources": {
+        "brahma_lib_py": {
+          "commit": "12da37ba685a91274fbdbb3f9c46c86e0b6d8e66",
+          "dirty": false
+        },
+        "siar-app": {
+          "commit": "9ab983c1934ccefb1b76e44d73da4844f4a40dec",
+          "dirty": false
+        },
+        "siar-build": {
+          "commit": "26d2310f77bf80cb31a8bf0a5abab409b13d17de",
+          "dirty": false
+        }
+      },
+      "wheels": {
+        "brahma_intelligence-0.1.0-cp313-cp313-macosx_11_0_arm64.whl": "1b621f46e22b89dc23b101ae44205311f6590ca4df82da5a0e982434673031e1",
+        "siar_app-0.7.0-cp313-cp313-macosx_11_0_arm64.whl": "b5c0b25c662aaeb60a0140ad77489437209face0aba86f00bd5a7708eab31478",
+        "siar_build-0.2.0-cp313-cp313-macosx_11_0_arm64.whl": "6e28513aac7bb5bad9121b44ed84bc124e7915f0a8386986c9e28b4495aee97c"
+      }
+    },
     "linux-x86_64": {
       "verified": "brahma 0.1.0, readme 106145 chars, siar-app readme 60769 chars, local_web intact; siar-build: 725 passed, 1 deselected in 49.24s; siar-app: 618 passed, 2 deselected in 11.60s",
       "sources": {
@@ -28,8 +50,9 @@
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "2111bf89ae7ac6bd8f994140b23c3850d0237b611a75deaa5cbec85543ca9db6",
+    "sha256": "0cb2698d4057c278821c85ad6068db196a84573f76fae1ab17d82c5969d79fab",
     "resolves_on": [
+      "darwin-arm64",
       "linux-x86_64"
     ]
   }
