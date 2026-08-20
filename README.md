@@ -1,15 +1,26 @@
-# siar-dist
+# SIaR Framework
+
 
 Signal Intelligence and Reconnaissance (SIaR) Framework from Vixen Intelligence. c. 2026
 
-The download for the two programs: **siar-app** runs detection models over folders of recordings,
-and **siar-build** breeds new ones from your own labelled audio.
+SIaR is our machine learning library, bot repository, benchmarking, and model production framework. This 
+download intsalls:
 
-This repository holds built wheels and nothing else. The sources are private; what is published
-here is compiled.
+
+| application | what it does |
+|---|---|
+| `siar-app` | run models from vixen intelligence and/or your proprietary models built using siar-build |
+| `siar-lib` | our proprietart machine learning framework for non linear signals |
+
+
+>This repository holds built wheels and nothing else. The sources are private; what is published
+>here is compiled.
+
+All output can be viewed by simply dropping the output folder into Ident dynamcis at www.goident.ai as well as being incorporated into
+exisitng data pipelines. Both siar-app and siar-build have a comprehensive README documenting their full functionality.
 
 > The full manual ships inside each install. `siar-app readme` opens siar-app's in a browser and
-> `siar-build readme` opens siar-build's. This page is how to get started, and a reference for
+> `siar-build readme` opens siar-build's. This README is how to get started, and a reference for
 > every command at the end.
 
 ---
@@ -18,7 +29,7 @@ here is compiled.
 
 The wheels are native extensions built against the CPython **3.13** ABI, and carry a
 `requires-python` that refuses anything else rather than failing later at import. You do not need a
-3.13 on the machine already: [uv](https://docs.astral.sh/uv/) fetches one for the environment it
+3.13 for download as [uv](https://docs.astral.sh/uv/) fetches one for the environment it
 creates, which is why these instructions use it rather than pip.
 
 ```bash
@@ -27,8 +38,6 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # or: brew install uv
 
 ### Pick the wheels for your machine
 
-A direct URL cannot select a wheel by tag the way an index would, so the platform is named in the
-filename you install. Set the base once:
 
 ```bash
 BASE=https://raw.githubusercontent.com/energy-master/siar-dist/main/dist
@@ -37,18 +46,18 @@ APP=$BASE/siar_app-0.7.0-cp313-cp313-linux_x86_64.whl
 BUILD=$BASE/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl
 ```
 
-Only Linux x86_64 is published today — see [Platforms](#platforms).
+See [Platforms](#platforms) to see which platforms have builds.
 
 ### Which install you want
 
-**Just running models — most people.** `uv tool install` puts `siar-app` on the PATH as a
+**Just running models** `uv tool install` puts `siar-app` on the PATH as a
 standalone command in its own environment, with its own 3.13:
 
 ```bash
 uv tool install --python 3.13 "$APP"
 ```
 
-**Building models too.** `siar-build verify`, `siar-build scan`, `siar-build soc scan` and every
+**Building models** `siar-build verify`, `siar-build scan`, `siar-build soc scan` and every
 `siar-app` command need `siar-app` **on the PATH**, so use a virtual environment you activate:
 
 ```bash
@@ -67,14 +76,6 @@ The `[run]` extra names siar-app's wheel by URL, so nothing else has to be fetch
 uv tool install --python 3.13 "$BUILD"
 ```
 
-`brahma-intelligence` resolves automatically in every case — it is named by URL in siar-build's
-metadata, with a marker that picks the right platform's build.
-
-> Installing the `[run]` extra as a *tool* does not work: `uv tool install` exposes only the
-> requested package's own command, so `siar-app` stays inside the tool's environment where
-> `verify` and `scan` cannot see it and report it missing even though it is there. Install the two
-> as separate tools, or use the venv above.
-
 ### Check it
 
 ```bash
@@ -86,8 +87,7 @@ siar-build --help    # only if you installed siar-build
 
 ## Update
 
-The URLs are fixed to `main`, so a new release appears at the same filename. Reinstall with
-`--force` rather than relying on an upgrade to notice:
+Reinstall / update with `--force` rather than relying on an upgrade:
 
 ```bash
 uv tool install --force --python 3.13 "$APP"        # tool install
@@ -116,24 +116,23 @@ you mean it:
 
 ---
 
-## Quick start — scan a folder
+## Quick start - Run a model with siar-app
 
-### The screen
+### With a terminal user interface (TUI)
 
-Everything this machine can run, the bots and features behind each, then an input, an output and
-Enter:
+View everything this machine can run, the bots and features behind each. Add an input and run:
 
 ```bash
 siar-app lib        # also what bare `siar-app` opens
 ```
 
-It lists the algorithm bundles downloaded here and the models built here with siar-build, side by
+It lists the algorithm bundles downloaded here and the models built on the box with siar-build, side by
 side. Keys: `↑↓` select, `tab` switch pane, `i` input folder, `o` output folder, `p` worker count,
 `enter` edit or run, `R` reload, `q` quit. It needs a terminal.
 
 ### The command line
 
-Look at the folder first. This reads headers only, so a multi-GB corpus is summarised in a second
+Scan the input folder first to get some metadata. This reads headers only, so a multi-GB corpus is summarised in a second
 and a mixed sample rate is caught before a long run rather than during one:
 
 ```bash
@@ -156,20 +155,18 @@ siar-app run ~/audio/survey \
   --out ~/scans/survey_sonar
 ```
 
-Useful flags on a real corpus: `--parallel` to scan several recordings at once, one process each;
-`--tui` to draw the whole run in one live panel; `--limit N` for a trial pass over a big folder;
+Useful flags on a real corpus: `--parallel` to set high performance computing flag to `TRUE`;
+`--tui` to draw the whole run in one live panel, `--limit N` for a trial pass over a big folder;
 `--resume` to pick up where an interrupted run stopped; `--link` to hardlink the audio instead of
 copying it. The analysis grid and the algorithm's own parameters can be overridden — `--fft`,
 `--hop`, `--fmin`, `--fmax`, `--param NAME=VALUE` — but the defaults come from the algorithm and
-are usually what it was calibrated with.
+are usually what it was trained with.
 
 ### Read the results
 
-`siar-app run` writes an output folder holding the audio, one structures sidecar per recording and
-a spectrogram thumbnail per lane. **Open that folder in IDent Dynamics** (goident.ai) to work
-through the detections.
+`siar-app run` writes an output folder holding all relevant output metrics and decisions. **Open that folder in IDent Dynamics** (goident.ai) to work through the detections.
 
-If the scan ran on a headless box, serve the folder read-only and look at it through an ssh tunnel
+If the scan ran on a remote box, serve the folder read-only and look at it through an ssh tunnel
 — the command prints the exact tunnel line:
 
 ```bash
@@ -181,8 +178,9 @@ and `siar-app feedback NAME -s 7` tells whoever published an algorithm how it di
 
 ### Move a model to another machine
 
+
 ```bash
-siar-app export NAME --out sonar.siarmodel
+siar-app export NAME --out sonar.siarmodel # download the model (can also publish to transfer models)
 siar-app import sonar.siarmodel      # on the other machine
 ```
 
@@ -191,13 +189,37 @@ It lands in that machine's workspace, appears in `siar-app lib`, and is runnable
 
 ---
 
-## Quick start — breed a society
+## Quick start - Evolve a society fof bots searching for your target with siar-build
 
-A **society** is one long-running search for one target. It keeps breeding bots, ranks every one it
-has ever bred on audio no search ever trained on, and publishes the top of that leaderboard as a
-single model that fires where *k* of them agree.
+A **society** is a population of bots continuously evolving to better detect a target or feature in an input stream (e.g. acoustic stream). 
+It runs autonmomously against and input stream always adapting and inproving its ability to infer and detect features within the stream. It is designed to evolve expressions rather than weights. It allows not only for a reactive model for a feature in a complex input stream, it also allows for insight by providing the expressions that have evovled to better represent the complex dataset fed to it.
 
-Your input is a folder of recordings, each with a `<stem>_labels.json` sidecar.
+Your input is a folder of recordings, each with a `<stem>_labels.json` file that provides data on the label/target being searched for.
+
+
+```json
+{
+  "labels": [
+    {"tmin": 75.0,  "tmax": 81.1,  "fmin": 6000, "fmax": 7500, "tag": "sonar",  "desc": "", "id": 848},
+    {"tmin": 143.2, "tmax": 144.6, "fmin": 5800, "fmax": 7200, "tag": "sonar",  "desc": "second sweep", "id": 849},
+    {"tmin": 212.4, "tmax": 218.0, "fmin": 300,  "fmax": 1200, "tag": "vessel", "desc": "", "id": 850}
+  ],
+  "file_desc": "deployment 04, north mooring"
+}
+```
+
+Each label is a rectangle in time (seconds from the start of that recording) and frequency (Hz).
+Only `tag`, `tmin` and `tmax` are needed — a row without a `tag` is skipped, `fmin`/`fmax` may be
+omitted or left at `0` when the annotation carries no frequency bounds, and `desc` and `id` are
+carried through for display only (ids do not have to be unique).
+
+The `tag` is matched against `--target` **case-sensitively**: `--target sonar` above evolves the
+society against the two `sonar` boxes and treats everything else in the stream — the `vessel` box
+included — as not-target.
+
+`<stem>.json` and `<stem>.labels.json` are accepted as well, as is Audacity's tab-separated
+`<stem>.txt`. TRhe `.txt` form carries no frequency bounds, so prefer the JSON where you have both.
+
 
 ```bash
 siar-build soc start ~/audio/sonar_big \
@@ -207,12 +229,23 @@ siar-build soc start ~/audio/sonar_big \
 
 It returns as soon as the society is up, and keeps running when you close the terminal. Useful
 options: `--name` to name it, `--top N` for how many bots vote in the published model (default 20),
-`--min-recall X` when a miss costs more than a false alarm.
+`--min-recall X` when a miss costs more than a false alarm, and `--parallel N` for how many
+searches run at once.
+
+`--parallel` and `--workers` are both node counts, but for different processes. `--parallel N`
+sets the society's search **node** count. N searches running side by side, each its own lineage with its own
+seed, all competing for places in the same population. That is *more* search rather than *faster*
+search. The default is `off` (one node) and `auto` or a non defined `--parallel` takes every core. The
+resolved number is written into the society's `soc.json`, so a replay breeds the same society on a
+machine with a different core count instead of silently becoming a different one.
+
+`--workers N` set the number of cores that a single search spreads its own generations
+across.  Several nodes already have the cores spoken for, so leave `--workers` at `off` whenever `--parallel` is used.
 
 ### Watch it
 
 ```bash
-siar-build soc              # the screen — bare `soc` opens it
+siar-build soc              # the info screen
 siar-build soc list         # every society, and whether it is alive
 siar-build soc status NAME  # one in detail, with its leaderboard
 siar-build soc genes NAME   # what the expressions are made of, and what selection is doing
@@ -225,7 +258,7 @@ searches to land; `--now` throws their work away).
 
 ## See the results
 
-Two different things get published, and neither implies the other.
+Two different streams get published:
 
 ### The run — what the society *did*
 
@@ -233,19 +266,18 @@ Two different things get published, and neither implies the other.
 siar-build soc share NAME
 ```
 
-Publishes the society's history, gene counts and heartbeat to IDent Dynamics and prints a link that
-shows it **live to anyone, with no account and no tunnel**. It is the same link every time, so one
+Publishes the society's evo history, live status, gene counts and heartbeat to IDent Dynamics and prints a link that
+shows it **live to anyone**. It is the same link every time, so one
 already sent out keeps working across a stop and a restart. Note that what goes up includes every
-bot's evolved expression. Turn it off with `--revoke`; publishing again revives the same link.
+bot's evolved expression. Turn it off with `--revoke` and publishing again revives the same link.
 
-To watch from a browser without publishing anything, serve it read-only over an ssh tunnel instead
-— the command prints the exact tunnel line:
+To watch from a browser without publishing anything, serve it read-only over an ssh tunnel instead. The command prints out instructions.
 
 ```bash
 siar-build serve
 ```
 
-### The model — what the society *made*
+### The model — what the society *builds*
 
 ```bash
 siar-build soc publish NAME \
@@ -262,16 +294,11 @@ export SIAR_APP_URL=https://goident.ai   # which installation, if not the one yo
 ```
 
 What goes up is the same `siar_<society>/` package that `siar-app run --algorithm-path` loads, so
-what runs on the server is what runs here. Read `report.txt` in the model folder before you publish.
+what runs on the server is what runs here. Read `report.txt` and `publish.results` in the model folder before you publish.
 
-**Uploading is not releasing.** The model lands *unpublished*: you and the site's supers can run it
-immediately — which is the point of publishing from the build box — and a super user ticks it in
-**Admin → Society models** before anybody else gets it. That page is also where the description
-users read gets written, and no later publish overwrites a human's editing. Publish again whenever
-the society improves; a user always runs the latest.
+**Uploading is not releasing.** The model lands *unpublished* so you  can run it
+immediately in IDent dynamics.
 
-The argument is a name **or a path**, so a model folder copied off another machine publishes the
-same way.
 
 ---
 
@@ -280,27 +307,10 @@ same way.
 | platform | wheels |
 |---|---|
 | Linux x86_64 (glibc) | ✅ published |
-| macOS 11+ arm64 (Apple Silicon) | on request |
+| macOS 11+ arm64 (Apple Silicon) | ✅ published|
 | macOS x86_64 (Intel) | on request |
 | Windows x86_64 | on request |
 
-Unlike an obfuscator, the compiler does not cross-build: each platform needs a machine of that
-kind, so a row is filled in when there is somewhere to build it. `dist/RELEASE.json` is the
-authority on what is actually published — a platform with no row there has no release, whatever
-files happen to be sitting in `dist/`.
-
-Two consequences worth stating rather than discovering. Alpine and other musl distributions are
-**not** covered by the Linux wheel and will fail at import — that row needs its own build. And an
-Intel Mac, including a 3.13 running under Rosetta on Apple Silicon, will not take an arm64 wheel:
-it needs the `macosx_10_9_x86_64` row.
-
-## What is in a release
-
-`dist/RELEASE.json` records, for each platform, the source commits its three wheels were built
-from, their sha256, and what the build verified before publishing — the wheels are installed into a
-clean environment and both full test suites are run against them, not against the source they came
-from. Platforms are built on different machines on different days, so each build writes its own row
-and leaves the others standing.
 
 ---
 
