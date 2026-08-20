@@ -82,6 +82,11 @@ DEFAULT_SIARBUILD = Path("/home/vixen/apps/siar-builder")
 DEFAULT_SIARAPP = Path("/home/vixen/apps/siar-app")
 DEFAULT_BRAHMA = Path("/home/vixen/apps/brahma_lib_py")
 
+#: The one package built from *this* repository. ``siar`` holds no product — a dependency on each
+#: half and, under its own name, their console scripts — so unlike the other three there is
+#: nothing in it to compile and nowhere private for it to live. See ``meta/pyproject.toml``.
+DEFAULT_META = ROOT / "meta"
+
 #: Where ``dist/`` is served from. ``raw.githubusercontent.com`` serves committed bytes with no
 #: redirect, and pip installs a wheel from a plain URL without complaint.
 DEFAULT_BASE_URL = "https://raw.githubusercontent.com/energy-master/siar-dist/main/dist"
@@ -617,6 +622,164 @@ def patch_siarbuild_pyproject(tree: Path, brahma: dict[str, str], siarapp: dict[
     path.write_text(text, encoding="utf-8")
 
 
+# -- the meta wheel ---------------------------------------------------------------------------
+
+
+def published_wheels(prefix: str) -> dict[str, str]:
+    """``{platform key: filename}`` for every platform whose wheel is sitting in ``dist/``.
+
+    Read off the directory rather than off this run, because the meta wheel has to name *all* the
+    platforms and only one of them is ever being built. Nuitka does not cross-build, so a release
+    is assembled a machine at a time; a meta wheel that named only the platform of whichever box
+    built it last would install on that platform and resolve to nothing on the others, while
+    carrying the same filename and quietly replacing its predecessor in ``dist/``.
+
+    Args:
+        prefix: The distribution's wheel-name prefix, e.g. ``siar_app``.
+
+    Returns:
+        One entry per platform found. Platforms with no wheel are simply absent.
+
+    Raises:
+        BuildError: If a platform has more than one wheel of this distribution, which means a
+            version bump left the old one behind and there is no way to tell which was meant.
+    """
+    found: dict[str, str] = {}
+    for key, target in TARGETS.items():
+        matches = sorted(DIST.glob(f"{prefix}-*-{PYTHON_TAG}-{PYTHON_TAG}-{target.wheel}.whl"))
+        if len(matches) > 1:
+            raise BuildError(
+                f"dist/ holds {len(matches)} {prefix} wheels for {key}:\n  "
+                + "\n  ".join(m.name for m in matches)
+                + "\nRemove the ones that are not shipping; a meta wheel cannot guess."
+            )
+        if matches:
+            found[key] = matches[0].name
+    return found
+
+
+def meta_platforms() -> dict[str, tuple[str, str]]:
+    """The platforms a full install can actually be resolved on.
+
+    A platform counts only when **both** halves are published for it. The alternative is a meta
+    wheel whose marker matches a machine, pulls in the half that exists and fails on the URL for
+    the half that does not — which reads to a client as a broken download rather than as a
+    platform that has not shipped yet.
+
+    Returns:
+        ``{platform key: (siar-app wheel, siar-build wheel)}``.
+
+    Raises:
+        BuildError: If no platform has both, so there is nothing to build a meta wheel for.
+    """
+    apps = published_wheels("siar_app")
+    builds = published_wheels("siar_build")
+    both = {k: (apps[k], builds[k]) for k in sorted(set(apps) & set(builds))}
+
+    for key in sorted(set(apps) ^ set(builds)):
+        half = "siar-app" if key in apps else "siar-build"
+        missing = "siar-build" if key in apps else "siar-app"
+        print(f"  note: {key} has {half} but no {missing} — left out of the meta wheel, so the "
+              f"install fails\n        as 'no wheel for this platform' rather than half-way "
+              f"through.")
+    if not both:
+        raise BuildError(
+            "no platform in dist/ has both siar-app and siar-build, so a meta wheel would "
+            "resolve for nobody. Build a full release first."
+        )
+    return both
+
+
+def patch_meta_pyproject(tree: Path, platforms: dict[str, tuple[str, str]], base_url: str) -> None:
+    """Fill in the meta package's empty ``dependencies`` with per-platform wheel URLs.
+
+    Args:
+        tree: The copied ``meta/`` tree, modified in place.
+        platforms: ``{platform key: (siar-app wheel, siar-build wheel)}``.
+        base_url: Where ``dist/`` is served from.
+
+    Raises:
+        BuildError: If the empty block is not there, which means ``meta/pyproject.toml`` has been
+            restructured. Shipping past that would produce a wheel that depends on nothing: three
+            commands on the PATH, two of which import a package the install never fetched.
+    """
+    path = tree / "pyproject.toml"
+    text = path.read_text(encoding="utf-8")
+
+    anchor = r"^dependencies = \[\n\]\n"
+    if not re.search(anchor, text, flags=re.M):
+        raise BuildError(
+            "meta/pyproject.toml has no empty `dependencies = []` block to fill in. Rather than "
+            "ship a meta wheel that requires neither half, this build stops."
+        )
+    lines = "".join(
+        f'    "siar-app @ {base_url}/{app} ; {TARGETS[key].marker}",\n'
+        f'    "siar-build @ {base_url}/{build} ; {TARGETS[key].marker}",\n'
+        for key, (app, build) in platforms.items()
+    )
+    text = re.sub(anchor, "dependencies = [\n" + lines + "]\n", text, count=1, flags=re.M)
+    path.write_text(text, encoding="utf-8")
+
+
+def build_meta(work: Path, platforms: dict[str, tuple[str, str]], base_url: str) -> Path:
+    """Build ``siar``, the one-install front door, and put it in ``dist/``.
+
+    Not compiled and not leak-checked, and both are deliberate. There is no product in this
+    package to protect — it is a dependency list and two commands — and :func:`leak_check` would
+    reject the very ``.py`` files it exists to ship. It is ``py3-none-any``, so unlike every other
+    row in :data:`TARGETS` it is built once and installs everywhere; the platform selection is
+    done by its dependencies' markers.
+
+    Args:
+        work: The build directory.
+        platforms: The platforms both halves are published for, from :func:`meta_platforms`.
+        base_url: Where ``dist/`` is served from.
+
+    Returns:
+        The wheel, as written into ``dist/``.
+
+    Raises:
+        BuildError: If the source directory is missing, or the finished wheel does not carry both
+            requirements and all three console scripts.
+    """
+    if not (DEFAULT_META / "pyproject.toml").is_file():
+        raise BuildError(f"no meta package at {DEFAULT_META}")
+
+    tree = work / "meta"
+    shutil.copytree(DEFAULT_META, tree,
+                    ignore=shutil.ignore_patterns("_wheel", "build", "dist", "*.egg-info",
+                                                  "__pycache__"))
+    # The manual is the repository's README and stays there — one copy, edited in one place. It is
+    # carried in here only so setuptools can read it as the long description, which is what puts
+    # it inside the wheel for `siar readme` to read back on a machine with nothing checked out.
+    readme = ROOT / "README.md"
+    if not readme.is_file():
+        raise BuildError(f"no README.md at {readme} to carry into the wheel")
+    shutil.copy2(readme, tree / "README.md")
+
+    patch_meta_pyproject(tree, platforms, base_url)
+    wheel = build_wheel(tree)
+
+    # What the wheel says is what a client's resolver acts on, so it is read back off the artefact
+    # rather than trusted from the file that produced it.
+    with zipfile.ZipFile(wheel) as zf:
+        metadata = next((n for n in zf.namelist() if n.endswith(".dist-info/METADATA")), "")
+        scripts = next((n for n in zf.namelist() if n.endswith(".dist-info/entry_points.txt")), "")
+        meta_text = zf.read(metadata).decode("utf-8") if metadata else ""
+        script_text = zf.read(scripts).decode("utf-8") if scripts else ""
+    for needed in ("siar-app @", "siar-build @"):
+        if needed not in meta_text:
+            raise BuildError(f"{wheel.name} carries no `{needed}` requirement — it would install "
+                             f"three commands and none of the code behind two of them.")
+    for command in ("siar =", "siar-app =", "siar-build ="):
+        if command not in script_text:
+            raise BuildError(f"{wheel.name} does not declare the `{command.split()[0]}` command. "
+                             f"Naming all three is the whole reason this package exists.")
+
+    shutil.copy2(wheel, DIST / wheel.name)
+    return DIST / wheel.name
+
+
 # -- verification -----------------------------------------------------------------------------
 
 
@@ -801,6 +964,37 @@ def write_manifest(key: str, entry: dict, python_tag: str, base_url: str) -> Pat
         "base_url": base_url,
         "platforms": dict(sorted(platforms.items())),
     }
+    # The meta wheel belongs to no platform and is refreshed on its own, so a platform build reads
+    # its row back rather than dropping it.
+    if path.exists():
+        meta = json.loads(path.read_text(encoding="utf-8")).get("meta")
+        if meta:
+            manifest["meta"] = meta
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    return path
+
+
+def write_meta_manifest(wheel: Path, platforms: dict[str, tuple[str, str]]) -> Path:
+    """Record the meta wheel in ``dist/RELEASE.json``, keeping every platform row.
+
+    Its own key rather than a platform's, because it is ``py3-none-any`` and belongs to all of
+    them at once — and because it is rebuilt whenever a new platform's halves land, which is a
+    different moment from any platform's build.
+
+    Args:
+        wheel: The wheel in ``dist/``.
+        platforms: The platforms it can be resolved on.
+
+    Returns:
+        The path written.
+    """
+    path = DIST / "RELEASE.json"
+    manifest = json.loads(path.read_text(encoding="utf-8")) if path.exists() else {}
+    manifest["meta"] = {
+        "wheel": wheel.name,
+        "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        "resolves_on": sorted(platforms),
+    }
     path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
     return path
 
@@ -819,7 +1013,35 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--run-tests", action="store_true",
                     help="also run siar-build's and siar-app's suites against the wheels (slow)")
     ap.add_argument("--keep-work", action="store_true", help="leave the build directory behind")
+    ap.add_argument("--meta-only", action="store_true",
+                    help="build only the `siar` meta wheel, from the halves already in dist/. "
+                         "Needs no compiler, no private source and no particular platform, and is "
+                         "what to run after another machine's wheels land")
     args = ap.parse_args(argv)
+
+    # Before the interpreter and platform gates, because neither applies: the meta wheel is
+    # py3-none-any, built from this repository alone, and Nuitka is not involved.
+    if args.meta_only:
+        work = Path(tempfile.mkdtemp(prefix="siar-meta-"))
+        try:
+            print("building the meta wheel")
+            platforms = meta_platforms()
+            print("  resolves on: " + ", ".join(platforms))
+            wheel = build_meta(work, platforms, args.base_url)
+            write_meta_manifest(wheel, platforms)
+            print(f"\ndist/\n  {wheel.name}  ({wheel.stat().st_size // 1024} KiB)"
+                  f"\n  RELEASE.json"
+                  f"\n\nInstall the whole download:\n"
+                  f"  uv tool install --python 3.13 {args.base_url}/{wheel.name}")
+            return 0
+        except BuildError as exc:
+            print(f"\nerror: {exc}", file=sys.stderr)
+            return 1
+        finally:
+            if args.keep_work:
+                print(f"\nwork kept at {work}")
+            else:
+                shutil.rmtree(work, ignore_errors=True)
 
     if sys.version_info[:2] != (3, 13):
         print(f"error: this must run under CPython 3.13 — the extension is compiled against the\n"
@@ -897,6 +1119,13 @@ def main(argv: list[str] | None = None) -> int:
         release.wheels.append(s_wheel.name)
         print(f"  {s_wheel.name}  leak check clean")
 
+        # After the three, because it is built from what is in dist/ and names them by URL.
+        print("\nbuilding the meta wheel")
+        m_platforms = meta_platforms()
+        print("  resolves on: " + ", ".join(m_platforms))
+        m_wheel = build_meta(work, m_platforms, args.base_url)
+        print(f"  {m_wheel.name}  (not compiled and not leak-checked: it holds no product)")
+
         if not args.no_verify:
             print("\nverifying")
             suites = {"siar-build": siarbuild.path / "tests",
@@ -912,11 +1141,15 @@ def main(argv: list[str] | None = None) -> int:
                        for n in release.wheels},
         }, PYTHON_TAG, args.base_url)
 
+        write_meta_manifest(m_wheel, m_platforms)
+
         print("\ndist/")
         for n in release.wheels:
             print(f"  {n}  ({(DIST / n).stat().st_size // 1024} KiB)")
+        print(f"  {m_wheel.name}  ({m_wheel.stat().st_size // 1024} KiB)")
         print("  RELEASE.json")
-        print(f"\nInstall:\n  pip install 'siar-build[run] @ {args.base_url}/{s_wheel.name}'"
+        print(f"\nInstall:\n"
+              f"  uv tool install --python 3.13 {args.base_url}/{m_wheel.name}   # both programs"
               f"\n  pip install {args.base_url}/{a_wheel.name}   # siar-app on its own")
         if any(s.dirty for s in release.sources):
             print("\nNOTE: built from a dirty tree. RELEASE.json records it. Do not ship it.")

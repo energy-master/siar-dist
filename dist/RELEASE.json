@@ -25,5 +25,12 @@
         "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "901477792c4271de5098b2a85eecb8e27b32c41cecba1139b1f903c424dc9334"
       }
     }
+  },
+  "meta": {
+    "wheel": "siar-0.1.0-py3-none-any.whl",
+    "sha256": "2111bf89ae7ac6bd8f994140b23c3850d0237b611a75deaa5cbec85543ca9db6",
+    "resolves_on": [
+      "linux-x86_64"
+    ]
   }
 }

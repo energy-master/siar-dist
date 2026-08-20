@@ -38,49 +38,66 @@ curl -LsSf https://astral.sh/uv/install.sh | sh   # or: brew install uv
 
 ### Pick the wheels for your machine
 
-
 ```bash
 BASE=https://raw.githubusercontent.com/energy-master/siar-dist/main/dist
 
+SIAR=$BASE/siar-0.1.0-py3-none-any.whl
 APP=$BASE/siar_app-0.7.0-cp313-cp313-linux_x86_64.whl
 BUILD=$BASE/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl
 ```
 
-See [Platforms](#platforms) to see which platforms have builds.
+See [Platforms](#platforms) to see which platforms have builds. `$SIAR` is the same file whatever
+you are on — it holds no compiled code, and names the right pair of wheels for the machine it
+lands on.
 
-### Which install you want
+### The whole download, one command
 
-**Just running models** `uv tool install` puts `siar-app` on the PATH as a
-standalone command in its own environment, with its own 3.13:
+```bash
+uv tool install --python 3.13 "$SIAR"
+```
+
+That puts `siar-app`, `siar-build` and `siar` on the PATH, in one environment with its own 3.13.
+It is the install to want: `siar-build verify`, `siar-build scan` and `siar-build soc scan` each
+need `siar-app` **on the PATH**, and this is what satisfies them.
+
+```bash
+siar readme          # this page, in a browser, offline
+```
+
+The manual travels inside the install, so it is there on a survey box with no network and nothing
+checked out. `siar-app readme` and `siar-build readme` open each program's own.
+
+### Or one half of it
+
+**Just running models.**
 
 ```bash
 uv tool install --python 3.13 "$APP"
 ```
 
-**Building models** `siar-build verify`, `siar-build scan`, `siar-build soc scan` and every
-`siar-app` command need `siar-app` **on the PATH**, so use a virtual environment you activate:
-
-```bash
-uv venv --python 3.13
-source .venv/bin/activate
-
-uv pip install "siar-build[run] @ $BUILD"
-```
-
-That puts `siar-build` **and** `siar-app` on the PATH for as long as the environment is active.
-The `[run]` extra names siar-app's wheel by URL, so nothing else has to be fetched by hand.
-
-**Building only, never running.** If this box breeds models and something else scans with them:
+**Building only, never running** — this box breeds models and something else scans with them:
 
 ```bash
 uv tool install --python 3.13 "$BUILD"
 ```
 
+**A virtual environment**, when you want the two importable as libraries rather than only as
+commands:
+
+```bash
+uv venv --python 3.13
+source .venv/bin/activate
+
+uv pip install "$SIAR"
+```
+
 ### Check it
 
 ```bash
+siar version         # every part of the download, and whether it is installed
+siar readme          # this manual, rendered in a browser, offline
 siar-app --help
-siar-build --help    # only if you installed siar-build
+siar-build --help
 ```
 
 ---
