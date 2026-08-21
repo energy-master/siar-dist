@@ -26,31 +26,31 @@
       }
     },
     "linux-x86_64": {
-      "verified": "brahma 0.1.0, readme 106145 chars, siar-app readme 60769 chars, local_web intact; siar-build: 725 passed, 1 deselected in 49.24s; siar-app: 618 passed, 2 deselected in 11.60s",
+      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact; siar-build: 741 passed, 1 deselected in 50.34s; siar-app: 646 passed, 2 deselected in 11.95s",
       "sources": {
         "brahma_lib_py": {
           "commit": "12da37ba685a91274fbdbb3f9c46c86e0b6d8e66",
           "dirty": false
         },
         "siar-app": {
-          "commit": "a274e628c973fdd6c68a2452cb627180a77e790b",
+          "commit": "c9854ea49e5e3b02b5ada297f86638533789c173",
           "dirty": false
         },
         "siar-build": {
-          "commit": "c5f2916ad9a391337fb2b5024312536de6883792",
+          "commit": "26d2310f77bf80cb31a8bf0a5abab409b13d17de",
           "dirty": false
         }
       },
       "wheels": {
-        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "875a7630e94c69ff53dac3eae64c872f2fe2fd0d3f6f115fabdbfba558f1651e",
-        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "cf45483e19874b0ef7d37c3fec955e94dd27552c996dcec2b2a3cb5ab6e6bc4e",
-        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "901477792c4271de5098b2a85eecb8e27b32c41cecba1139b1f903c424dc9334"
+        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "f6ec3ec564695b4f614094b0377875ab3b952c0c5dbcf26a92d0290ba534a093",
+        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "e0a59ab1fef911ded811cac7f811d61b98eb9631e5d8f636e6ace51406d0de2f",
+        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "e7b72b3a8aa96c81c4c7e9499014181eaf629f23db4012375effb5ac8644e797"
       }
     }
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "0cb2698d4057c278821c85ad6068db196a84573f76fae1ab17d82c5969d79fab",
+    "sha256": "7a156b887c3d7177589fd8afff4ac0cd5a9bf575daff980a03bdd5cd482ce90b",
     "resolves_on": [
       "darwin-arm64",
       "linux-x86_64"
