@@ -221,8 +221,18 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> str
     # console, and a subprocess that tries -- a test that prompts, a tool asking to confirm --
     # would otherwise wait on it forever behind captured output, which reads as a hung build.
     # Closed, the same call fails in seconds and says which command it was.
+    #
+    # The process group is the same argument one level up, and Windows-only. A console control
+    # event is delivered to every process in the group that raised it, not to one process: so a
+    # test that starts a society and stops it again sends its Ctrl-C to *this* script too, which
+    # arrives here as a KeyboardInterrupt out of subprocess.run and looks like somebody at the
+    # keyboard. There is nothing to add on POSIX -- the daemon in question detaches itself with
+    # start_new_session, which is exactly the flag Windows ignores, which is why only Windows
+    # needs a fence. CREATE_NEW_PROCESS_GROUP is absent as an attribute off Windows, hence the
+    # getattr rather than a platform branch around the call.
+    group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
     proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          stdin=subprocess.DEVNULL,
+                          stdin=subprocess.DEVNULL, creationflags=group,
                           env={**os.environ, **(env or {})})
     if proc.returncode != 0:
         raise BuildError(f"{' '.join(cmd)}\n  exit {proc.returncode}\n"
