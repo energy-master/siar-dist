@@ -851,7 +851,11 @@ def verify(wheels: list[Path], workdir: Path, suites: dict[str, Path]) -> str:
     """
     venv = workdir / "verify-venv"
     run([sys.executable, "-m", "venv", str(venv)])
-    py = venv / "bin" / "python"
+    # Windows puts a venv's executables in Scripts\ and suffixes them .exe; POSIX uses bin/ and
+    # no suffix. Spelled once here, because the console scripts below are looked up the same way.
+    scripts = venv / ("Scripts" if os.name == "nt" else "bin")
+    suffix = ".exe" if os.name == "nt" else ""
+    py = scripts / f"python{suffix}"
 
     third_party = sorted(external_requirements(wheels) | ({"pytest"} if suites else set()))
     run([str(py), "-m", "pip", "install", "--quiet", *third_party])
@@ -881,8 +885,8 @@ def verify(wheels: list[Path], workdir: Path, suites: dict[str, Path]) -> str:
     summary = run([str(py), "-c", code]).strip()
     # The console scripts, because they are what a client types and they are the entry points that
     # have to survive compilation -- `python -m siarbuild` no longer can.
-    run([str(venv / "bin" / "siar-build"), "--help"])
-    run([str(venv / "bin" / "siar-app"), "--help"])
+    run([str(scripts / f"siar-build{suffix}"), "--help"])
+    run([str(scripts / f"siar-app{suffix}"), "--help"])
 
     for name, tests in suites.items():
         # Selected by name with `-k`, not by node id with `--deselect`. A `--deselect` whose path
