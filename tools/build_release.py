@@ -222,17 +222,25 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> str
     # would otherwise wait on it forever behind captured output, which reads as a hung build.
     # Closed, the same call fails in seconds and says which command it was.
     #
-    # The process group is the same argument one level up, and Windows-only. A console control
-    # event is delivered to every process in the group that raised it, not to one process: so a
-    # test that starts a society and stops it again sends its Ctrl-C to *this* script too, which
-    # arrives here as a KeyboardInterrupt out of subprocess.run and looks like somebody at the
-    # keyboard. There is nothing to add on POSIX -- the daemon in question detaches itself with
-    # start_new_session, which is exactly the flag Windows ignores, which is why only Windows
-    # needs a fence. CREATE_NEW_PROCESS_GROUP is absent as an attribute off Windows, hence the
-    # getattr rather than a platform branch around the call.
-    group = getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0) if os.name == "nt" else 0
+    # No console, on Windows, for the same reason. ``os.kill(pid, 0)`` is a liveness probe
+    # everywhere except Windows, where signal 0 *is* ``CTRL_C_EVENT`` and os.kill routes it to
+    # GenerateConsoleCtrlEvent -- so siar-build's daemon, polling a stopping society five times
+    # a second, fires hundreds of real Ctrl-Cs into whatever console it shares. This script was
+    # in that console, and read them as somebody at the keyboard: three identical
+    # KeyboardInterrupts out of subprocess.run, none of them typed.
+    #
+    # A process group is not a fence against that -- the event follows the console, not the
+    # group -- so the child is given no console to broadcast into. Output is captured through
+    # pipes and stdin is closed, so there was nothing for a console to carry anyway.
+    #
+    # POSIX passes 0 and is unchanged. Neither flag exists as an attribute off Windows, hence
+    # the getattr rather than a platform branch around the call.
+    flags = 0
+    if os.name == "nt":
+        flags = (getattr(subprocess, "DETACHED_PROCESS", 0)
+                 | getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
     proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
-                          stdin=subprocess.DEVNULL, creationflags=group,
+                          stdin=subprocess.DEVNULL, creationflags=flags,
                           env={**os.environ, **(env or {})})
     if proc.returncode != 0:
         raise BuildError(f"{' '.join(cmd)}\n  exit {proc.returncode}\n"
