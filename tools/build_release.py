@@ -997,7 +997,10 @@ def write_manifest(key: str, entry: dict, python_tag: str, base_url: str) -> Pat
         meta = json.loads(path.read_text(encoding="utf-8")).get("meta")
         if meta:
             manifest["meta"] = meta
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    # newline="\n" rather than the default: this file is written by whichever machine built
+    # last, and Windows would translate every line ending on the way out. The manifest would
+    # then arrive as a whole-file diff on every Windows build, burying the one row that changed.
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
@@ -1022,7 +1025,7 @@ def write_meta_manifest(wheel: Path, platforms: dict[str, tuple[str, str]]) -> P
         "sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
         "resolves_on": sorted(platforms),
     }
-    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+    path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8", newline="\n")
     return path
 
 
