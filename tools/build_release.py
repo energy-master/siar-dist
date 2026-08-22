@@ -217,7 +217,12 @@ def run(cmd: list[str], cwd: Path | None = None, env: dict | None = None) -> str
     Raises:
         BuildError: On a non-zero exit. The output is the point, so it travels with the error.
     """
+    # stdin is closed, not inherited. Nothing this script runs has any business reading the
+    # console, and a subprocess that tries -- a test that prompts, a tool asking to confirm --
+    # would otherwise wait on it forever behind captured output, which reads as a hung build.
+    # Closed, the same call fails in seconds and says which command it was.
     proc = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL,
                           env={**os.environ, **(env or {})})
     if proc.returncode != 0:
         raise BuildError(f"{' '.join(cmd)}\n  exit {proc.returncode}\n"
