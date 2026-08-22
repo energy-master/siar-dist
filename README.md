@@ -36,6 +36,13 @@ creates, which is why these instructions use it rather than pip.
 curl -LsSf https://astral.sh/uv/install.sh | sh   # or: brew install uv
 ```
 
+```powershell
+winget install --id astral-sh.uv -e               # Windows
+```
+
+Close and reopen PowerShell after that, or `uv` is not on the `PATH` yet: the installer writes it
+to the registry, and a shell already open keeps the environment it started with.
+
 ### Pick the wheels for your machine
 
 ```bash
@@ -326,7 +333,20 @@ immediately in IDent dynamics.
 | Linux x86_64 (glibc) | ✅ published |
 | macOS 11+ arm64 (Apple Silicon) | ✅ published|
 | macOS x86_64 (Intel) | on request |
-| Windows x86_64 | on request |
+| Windows x86_64 | ✅ published — command line only |
+
+**What "command line only" excludes, and why it is said here rather than discovered.** On Windows
+`siar-app run`, `siar-app scan` and siar-build's pipeline all work. **`siar-build soc` — the
+society daemon — and the `run-tui` screens do not.** They rest on process groups, `waitpid` and
+terminal handling that Windows has no equivalent of, and one of the gaps is worse than an absent
+feature: the daemon's liveness check is `os.kill(pid, 0)`, which on Windows is not a check at all
+but a Ctrl-C sent to every process sharing the console. Breed societies on macOS or Linux, and
+scan with what they breed anywhere.
+
+Windows is also the one row in `dist/RELEASE.json` with an empty `verified`. Its wheels compile,
+pass the leak check, install and run; 714 of 741 of siar-build's tests pass against them. The
+suite has not been run green end to end on that platform, and the manifest records that rather
+than rounding it up.
 
 
 ---
