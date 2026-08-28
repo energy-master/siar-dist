@@ -31,7 +31,7 @@
       }
     },
     "linux-x86_64": {
-      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables",
+      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables; siar-build: 741 passed, 1 deselected in 79.84s (0:01:19); siar-app: 646 passed, 2 deselected in 17.89s; siar-db: 53 passed in 14.33s",
       "sources": {
         "brahma_lib_py": {
           "commit": "fca314d95871dc9f2286efb36a63efaacf8d212a",
@@ -46,15 +46,15 @@
           "dirty": false
         },
         "siar-db": {
-          "commit": "c27655b8a2d76d7e22389f269f3f2099c05b53f5",
+          "commit": "5499c67516a14f6dcbc817d6f3955081311c2701",
           "dirty": false
         }
       },
       "wheels": {
-        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "c24c4779f0795952ecd78425003fd4625ea3cd4c615867bb550eea58b4ef8923",
-        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "5dc728d3bbd15f4d8405bdfa6c60b96bf9daf4eea6535bff3b30aff1746c7fa8",
-        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "b2a9f9fba8876d00aab7847af3f21a3083eb530db6d00513935af2ba03f36992",
-        "siar_db-0.1.0-cp313-cp313-linux_x86_64.whl": "989779239b7008b3ac0c0da66752e25816e74c4ffd89dc217eae981fa2deef88"
+        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "558561f87ef4b45387c33041a53d685dff6e95de4970e09bf17a880b77f662b2",
+        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "c798f4ed2e54fe943c74b189f4107e773d47413b71aa0c251e3fb16e24f98091",
+        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "42bf179d486444218a141b26d0b54165282f073f1e149498f52b32dd8150c55b",
+        "siar_db-0.1.0-cp313-cp313-linux_x86_64.whl": "27120256fa442195126ff539281eacb2735e70b5298bcab9d055aa5233be9453"
       }
     },
     "windows-x86_64": {
@@ -82,7 +82,7 @@
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "cd6d9f7b62bf134d0dd23fdfdf9d5bb0d45095ca2219cdf3e40140a329e0e7f9",
+    "sha256": "e519f8255e94b799f0d4ef21f07f479718689ba1ac60b0fd3e7c4ade53b090f1",
     "resolves_on": [
       "darwin-arm64",
       "linux-x86_64"
