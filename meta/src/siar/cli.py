@@ -34,6 +34,17 @@ __all__ = ["DISTRIBUTIONS", "main", "readme_markdown", "render_page"]
 #: usually the missing row.
 DISTRIBUTIONS = ("siar", "siar-app", "siar-build", "siar-db", "brahma-intelligence")
 
+#: The module each distribution installs, for the ones whose presence in the metadata does not
+#: mean they can actually be imported. ``siar`` is absent because it is this package: it is
+#: running, so it loaded. The rest are compiled extensions and are the whole reason
+#: :func:`_cmd_version` imports rather than only reads a version number.
+_MODULES = {
+    "siar-app": "siarapp",
+    "siar-build": "siarbuild",
+    "siar-db": "siardb",
+    "brahma-intelligence": "brahma_intelligence",
+}
+
 #: The page the rendered manual is written into. Deliberately plain and deliberately inline: this
 #: is opened over ``file://`` on a machine that may have no network at all, so a stylesheet from
 #: anywhere else would be a blank page on exactly the machines this command exists for.
@@ -165,28 +176,72 @@ def _cmd_readme(args: argparse.Namespace) -> int:
 
 
 def _cmd_version(args: argparse.Namespace) -> int:
-    """``siar version`` — the four distributions, and whether each one is present.
+    """``siar version`` — the five distributions, whether each is present, and whether it can run.
+
+    Present and runnable are different questions on Linux, and this is where somebody lands when
+    they are trying to find out which one they have. A wheel is tagged ``linux_x86_64``, which
+    carries no glibc floor, so pip installs one happily on a machine whose C library cannot load
+    it: every row below says a version, and the command still fails. So the C library is reported
+    too, and each compiled part is *imported* rather than merely looked up.
 
     Args:
         args: Parsed arguments. Unused.
 
     Returns:
-        ``0`` when the install is complete, ``1`` when a piece of it is missing — so a support
+        ``0`` when the install is complete and every part loads, ``1`` otherwise — so a support
         script can test the exit status instead of reading the table.
     """
     from importlib.metadata import PackageNotFoundError, version
 
     missing = 0
+    broken: list[tuple[str, ImportError]] = []
     for dist in DISTRIBUTIONS:
         try:
-            print(f"  {dist:<22}{version(dist)}")
+            reported = version(dist)
         except PackageNotFoundError:
             print(f"  {dist:<22}not installed")
             missing += 1
+            continue
+        module = _MODULES.get(dist)
+        note = ""
+        if module:
+            try:
+                __import__(module)
+            except ImportError as exc:  # noqa: PERF203 — one per distribution, five in total
+                note = "  ** installed but cannot be loaded **"
+                broken.append((dist, exc))
+        print(f"  {dist:<22}{reported}{note}")
+
+    _print_libc()
+
+    if broken:
+        from siar import glibc
+
+        # One explanation, not five. Every compiled wheel here is built on the same machine
+        # against the same C library, so a glibc that is too old for one is too old for the rest;
+        # printing the same page per row would bury the answer in repetitions of itself.
+        dist, exc = broken[0]
+        print(file=sys.stderr)
+        if glibc.is_glibc_error(exc):
+            print(glibc.explain(exc, dist), file=sys.stderr)
+        else:
+            print(f"error: {dist} is installed but will not import:\n  {exc}", file=sys.stderr)
     if missing:
         print(f"\n{missing} of {len(DISTRIBUTIONS)} missing. Install the whole download with:\n"
               "  uv tool install --python 3.13 <the siar wheel's URL>", file=sys.stderr)
-    return 1 if missing else 0
+    return 1 if (missing or broken) else 0
+
+
+def _print_libc() -> None:
+    """The C library line, on the platforms where it decides whether any of this runs."""
+    if sys.platform != "linux":
+        return
+    from siar import glibc
+
+    have = glibc.installed()
+    print(f"\n  {'glibc':<22}"
+          + (f"{have[0]}.{have[1]}" if have
+             else "not glibc (musl?) — not a supported platform"))
 
 
 def main(argv: list[str] | None = None) -> int:

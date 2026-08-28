@@ -396,6 +396,39 @@ folders and the cache. `siar-db info` prints the paths.
 | macOS x86_64 (Intel) | on request | on request | on request |
 | Windows x86_64 | ✅ published — command line only | ✅ published — command line only | not yet built |
 
+### Linux needs a recent C library
+
+The Linux wheels are compiled against the build machine's glibc, and a wheel tag carries no way to
+say so — `linux_x86_64` matches every x86_64 Linux, so pip will install these on a machine that
+cannot load them and the failure arrives at first import rather than at install.
+
+| what | glibc needed |
+|---|---|
+| `siar-app`, `siar-build`, `brahma-intelligence` | **2.34** or newer |
+| `siar-db` | **2.38** or newer |
+
+That is Ubuntu 22.04+ / Debian 12+ / RHEL 9+ for the first row, and Ubuntu 23.10+ / Debian 13+ /
+Fedora 38+ for siar-db. `ldd --version` says what a box has. Alpine and other musl distributions
+match the same wheel tag and are **not** supported.
+
+If a box is too old, the command says so in as many words rather than raising a loader traceback:
+
+```
+error: siar-db cannot start — the C library on this machine is too old for it.
+
+  this machine has  glibc 2.28
+  this build needs  glibc 2.38 or newer
+```
+
+It reads the requirement out of the compiled module rather than repeating what the loader said,
+which matters: the loader stops at the *first* version it cannot satisfy, so it reports 2.29 for a
+module that actually needs 2.38, and upgrading to what it asked for does not fix anything.
+`siar version` reports the same thing, and marks which parts are installed but cannot be loaded.
+
+Ask us for a build against an older glibc if you need one. Nothing in the programs requires a
+recent C library; the wheels are simply compiled on a current machine, and a build made on an
+older one runs on both.
+
 **A platform is only in the one-command install once every column is filled.** Nuitka does not
 cross-build, so each row is a machine somebody has to run the build on, and the columns are filled
 on different days. `siar` — the wheel that installs all of it — names only the platforms that have

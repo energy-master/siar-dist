@@ -24,13 +24,19 @@ dependencies = [
 [project.scripts]
 # The three delegated entries are the whole point of this package. `uv tool install` exposes only
 # the entry points of the distribution it was asked for, so naming siar-app, siar-build and
-# siar-db here is what turns four installs into one. They are the same targets those wheels
-# declare themselves, reached through the same compiled modules; nothing is wrapped or
-# re-implemented.
+# siar-db here is what turns four installs into one.
+#
+# They go through siar.launch rather than naming each program's own entry point directly, and the
+# wrapper is one `try` deep: a native extension can fail to LOAD, and a generated console script
+# imports its target at module scope, so there is nowhere to catch that unless something sits in
+# front. What it catches is the dynamic loader complaining about a glibc version — a traceback
+# about a versioned symbol in a library the client has never heard of — and what it prints instead
+# says which program, what this machine has, what the build needs, and what to do about it. Past
+# that first line every argument, exit status and stream belongs to the program being run.
 siar = "siar.cli:main"
-siar-app = "siarapp.cli.main:main"
-siar-build = "siarbuild.cli:main"
-siar-db = "siardb.cli.main:main"
+siar-app = "siar.launch:siar_app"
+siar-build = "siar.launch:siar_build"
+siar-db = "siar.launch:siar_db"
 
 [tool.setuptools.packages.find]
 where = ["src"]
