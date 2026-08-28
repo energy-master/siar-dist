@@ -4,7 +4,7 @@
   "base_url": "https://raw.githubusercontent.com/energy-master/siar-dist/main/dist",
   "platforms": {
     "darwin-arm64": {
-      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables; siar-build: 741 passed, 1 deselected in 26.40s; siar-app: 646 passed, 2 deselected in 7.56s; siar-db: 47 passed in 5.37s",
+      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables; siar-build: 741 passed, 1 deselected in 23.73s; siar-app: 646 passed, 2 deselected in 7.43s; siar-db: 53 passed in 5.58s",
       "sources": {
         "brahma_lib_py": {
           "commit": "fca314d95871dc9f2286efb36a63efaacf8d212a",
@@ -19,15 +19,15 @@
           "dirty": false
         },
         "siar-db": {
-          "commit": "c27655b8a2d76d7e22389f269f3f2099c05b53f5",
+          "commit": "5499c67516a14f6dcbc817d6f3955081311c2701",
           "dirty": false
         }
       },
       "wheels": {
-        "brahma_intelligence-0.1.0-cp313-cp313-macosx_11_0_arm64.whl": "52e144592fd782b3b3c0efe0b6be98bfc108d1f51277e81300ca9ab3f97755ed",
-        "siar_app-0.7.0-cp313-cp313-macosx_11_0_arm64.whl": "af401c38be5bc913e377d30b9f0e3ffb7ec12f0c47247802a1707c157b07a68b",
-        "siar_build-0.2.0-cp313-cp313-macosx_11_0_arm64.whl": "f0a30bb77f5ad57f9fae3a29a2febaea0c0c76efc4502af0d551f85f1a2f3450",
-        "siar_db-0.1.0-cp313-cp313-macosx_11_0_arm64.whl": "c7d3209706e09cf46ded71f0d37fcb89c56434d17e3701546912680bd203b41e"
+        "brahma_intelligence-0.1.0-cp313-cp313-macosx_11_0_arm64.whl": "8cfb1ec1514e07e8bc2fa966774926d458fc05d21443a34663c8cb3e326edadc",
+        "siar_app-0.7.0-cp313-cp313-macosx_11_0_arm64.whl": "350e39bae919d42e4f167b3b5af2e5fec1ff75bc86de278bb13748ec69a1a703",
+        "siar_build-0.2.0-cp313-cp313-macosx_11_0_arm64.whl": "99ab1c0206cf20787eb7561959d1427366ad45c4673fc229ff7e2ca381b82e90",
+        "siar_db-0.1.0-cp313-cp313-macosx_11_0_arm64.whl": "6cc59f4c5d330b5039d8e15b8f509102b24aef842332caa635aef922ac3af4bc"
       }
     },
     "linux-x86_64": {
@@ -82,7 +82,7 @@
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "e519f8255e94b799f0d4ef21f07f479718689ba1ac60b0fd3e7c4ade53b090f1",
+    "sha256": "8710ea5e3b54ac5b0ac987f603bb8927a2693d3d82c65a5e36d990969ea908d0",
     "resolves_on": [
       "darwin-arm64",
       "linux-x86_64"
