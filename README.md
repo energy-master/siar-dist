@@ -124,15 +124,41 @@ siar-db --help
 
 ## Update
 
-Reinstall / update with `--force` rather than relying on an upgrade:
-
 ```bash
-uv tool install --force --python 3.13 "$APP"        # tool install
-uv pip install --reinstall "siar-build[run] @ $BUILD"   # inside the venv
+uv tool install --force --refresh --python 3.13 "$SIAR"     # the whole download
 ```
 
-Nothing you have built or scanned is touched by an update. Models, societies, output folders and
-the local indexes all live outside the install.
+One program on its own, if that is how it was installed:
+
+```bash
+uv tool install --force --refresh --python 3.13 "$APP"
+uv tool install --force --refresh --python 3.13 "$DB"
+```
+
+Inside a virtual environment:
+
+```bash
+uv pip install --reinstall --refresh "$SIAR"
+```
+
+**`uv tool upgrade siar` does nothing here, and neither does pip's `-U`.** Upgrading means asking
+an index for a higher version, and these are direct URLs at a pinned filename — there is no index
+to ask. A release republishes the *same* filename with different bytes, so `--force` is what
+reinstalls it.
+
+**`--refresh` is the flag people miss.** uv caches downloads keyed on the URL, and the URL does not
+change between releases. Without it you can get a forced reinstall of the copy already in the
+cache, which looks exactly like an update that did nothing. If a version still looks wrong after
+this, `uv cache clean` and install again.
+
+Check what you ended up with:
+
+```bash
+siar version
+```
+
+Nothing you have built or scanned is touched by an update. Models, societies, output folders,
+siar-db's workspace under `$SIARDB_HOME` and the local indexes all live outside the install.
 
 ## Remove
 

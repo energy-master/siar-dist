@@ -77,7 +77,7 @@
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "b2c4fb1650967c6745e494c095aa25cfc222f13c29a8a782bee329676f01e409",
+    "sha256": "85225a4c7d4f8fc769bc1a0d4714139f0923ff7f9b214f71cdc7218ae5655840",
     "resolves_on": [
       "linux-x86_64"
     ]
