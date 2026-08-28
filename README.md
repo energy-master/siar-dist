@@ -450,6 +450,8 @@ It reads the requirement out of the compiled module rather than repeating what t
 which matters: the loader stops at the *first* version it cannot satisfy, so it reports 2.29 for a
 module that actually needs 2.38, and upgrading to what it asked for does not fix anything.
 `siar version` reports the same thing, and marks which parts are installed but cannot be loaded.
+Every wheel carries this check itself, so it works whether you installed the whole download or one
+program on its own.
 
 Ask us for a build against an older glibc if you need one. Nothing in the programs requires a
 recent C library; the wheels are simply compiled on a current machine, and a build made on an

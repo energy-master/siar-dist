@@ -13,12 +13,13 @@ never heard of. A generated console script imports its target at module scope, s
 to catch that unless something sits in front. This is that something, and it is the smallest thing
 that can be: check the exception, print :func:`siar.glibc.explain`'s account of it, exit 1.
 
-**It only guards the full download.** Each wheel also declares its own console script — installing
-``siar_db`` alone still gives you a ``siar-db`` that goes straight to the compiled module and still
-fails with the raw loader error. Making that path friendly too would mean shipping a Python
-launcher inside a wheel whose entire purpose is to contain no Python, which is a worse trade than
-an ugly message on an install nobody is told to do. ``siar version`` reports the same diagnosis for
-anybody who lands there.
+**This is the second of two guards, and usually not the one that runs.** Each product wheel carries
+its own launcher, written in by ``build_release.py``, because these entry points do not reliably
+survive an install: every wheel here declares a ``siar-db``, all of them are installed into one
+environment, and which lands last is not ordered — ``uv tool install`` was observed writing the
+siar-db wheel's script over this package's, leaving the guard installed and unreachable. That is
+what put the guard in the wheels; this stays because the race runs both ways and a second identical
+guard costs nothing.
 """
 from __future__ import annotations
 

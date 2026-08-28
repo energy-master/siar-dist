@@ -211,6 +211,114 @@ UNRUNNABLE_COMPILED: dict[str, tuple[tuple[str, str], ...]] = {
 }
 
 
+#: The console-script launcher written into each product wheel, with the guard in it.
+#:
+#: It has to live in the WHEEL and not only in the ``siar`` meta package, and that is a lesson
+#: rather than a preference. Every wheel here declares its own console script, all of them are
+#: installed into one environment, and the order is not defined -- ``uv tool install`` was observed
+#: writing ``siar-db`` from the siar-db wheel, straight to the compiled module, with the meta
+#: package's launcher installed and unreachable. A guard that is only in the front door is a guard
+#: on whichever door the installer happened to use last.
+#:
+#: It holds no product: one import, one call, and a message for the single failure a compiled
+#: extension has that source never does. The glibc floor is read out of this wheel's own extension
+#: at build time, because the loader reports the first version it cannot satisfy rather than the
+#: highest one needed, and a client who upgrades to the number in the error is still broken.
+LAUNCHER_SOURCE = r'''# Vixen Intelligence c.2026
+"""Console-script launcher for `{command}`: check that this build can load, then get out of the way.
+
+Written into this wheel by siar-dist/tools/build_release.py. Everything after the guard belongs to
+the program: its arguments, its exit status, its streams. Nothing here is re-implemented.
+"""
+from __future__ import annotations
+
+import sys
+
+#: What this wheel's compiled extension needs, read out of it when the wheel was built.
+GLIBC_FLOOR = {floor!r}
+
+#: The command a client typed, for the message.
+COMMAND = "{command}"
+
+
+def _installed_glibc() -> str:
+    """This machine's glibc version as text, or "" if it has none or will not say."""
+    try:
+        import os
+        import re
+
+        answer = os.confstr("CS_GNU_LIBC_VERSION") or ""
+        found = re.search(r"\d+\.\d+", answer)
+        return found.group(0) if found else ""
+    except Exception:
+        return ""
+
+
+def _short(exc: BaseException) -> str:
+    """The message when the `siar` package is not installed to render the full one."""
+    have = _installed_glibc()
+    need = ".".join(str(n) for n in GLIBC_FLOOR) if GLIBC_FLOOR else "a newer version"
+    return "\n".join([
+        "error: " + COMMAND + " cannot start -- the C library on this machine is too old for it.",
+        "",
+        "  this machine has  glibc " + (have or "unknown"),
+        "  this build needs  glibc " + need + " or newer",
+        "",
+        "  glibc is the core of a Linux distribution and is not upgraded on its own. Run this on",
+        "  a newer distribution or in a container, or ask Vixen Intelligence for a build against",
+        "  an older glibc -- nothing in the program needs a recent one.",
+        "",
+        "The original error follows.",
+        "",
+        "  " + str(exc),
+    ])
+
+
+def _explain(exc: BaseException) -> str:
+    """The full account where `siar` is installed, the short one otherwise."""
+    try:
+        from siar.glibc import explain, is_glibc_error
+    except ImportError:
+        return _short(exc)
+    return explain(exc, COMMAND) if is_glibc_error(exc) else _short(exc)
+
+
+def main() -> int:
+    """Load the program and run it, or say why it cannot be loaded."""
+    try:
+        from {module} import {function} as _run
+    except ImportError as exc:
+        text = str(exc)
+        if "GLIBC_" not in text or "not found" not in text:
+            raise
+        sys.stderr.write(_explain(exc) + "\n")
+        return 1
+    return _run()
+'''
+
+
+@dataclass(frozen=True, slots=True)
+class Launcher:
+    """The guard written into one product wheel.
+
+    Attributes:
+        module: The top-level module name to write it as. Per package, because two wheels sharing
+            a launcher filename would overwrite each other in site-packages.
+        command: The console script it becomes.
+        target: What it delegates to, ``module:function`` as an entry point spells it.
+    """
+
+    module: str
+    command: str
+    target: str
+
+    def source(self, floor: tuple[int, int] | None) -> bytes:
+        """The launcher's text, with this wheel's glibc floor baked in."""
+        module, _, function = self.target.partition(":")
+        return LAUNCHER_SOURCE.format(command=self.command, module=module, function=function,
+                                      floor=floor).encode("utf-8")
+
+
 class BuildError(RuntimeError):
     """A stage failed. The message is meant to be the whole explanation."""
 
@@ -458,8 +566,34 @@ def build_wheel(tree: Path) -> Path:
     return wheels[0]
 
 
+def glibc_floor(extension: Path) -> tuple[int, int] | None:
+    """The highest glibc version a compiled extension needs, or ``None``.
+
+    Read with the meta package's own :mod:`siar.glibc`, which is what will report this to a client
+    at run time -- so the number baked into a launcher and the number ``siar version`` prints come
+    from one implementation rather than two that can drift.
+
+    Args:
+        extension: The ``.so`` just compiled.
+
+    Returns:
+        ``(major, minor)``, or ``None`` off Linux or where the file cannot be parsed.
+    """
+    if str(extension).endswith(".so"):
+        sys.path.insert(0, str(DEFAULT_META / "src"))
+        try:
+            from siar.glibc import required
+
+            return required(str(extension))
+        except ImportError:
+            return None
+        finally:
+            sys.path.pop(0)
+    return None
+
+
 def recompose(wheel: Path, package: str, extension: Path, keep: tuple[str, ...],
-              plat: str) -> Path:
+              plat: str, launcher: "Launcher | None" = None) -> Path:
     """Replace a source wheel's payload with the compiled module and its sidecar.
 
     Three edits to the archive, and the wheel is a different artefact afterwards:
@@ -478,6 +612,8 @@ def recompose(wheel: Path, package: str, extension: Path, keep: tuple[str, ...],
         extension: The compiled module to insert.
         keep: Archive-relative glob patterns under ``<package>/`` to keep as readable data.
         plat: The wheel platform tag.
+        launcher: The console-script guard to write in, and to repoint the wheel's own entry
+            point at. See :data:`LAUNCHER_SOURCE` for why it belongs in the wheel.
 
     Returns:
         The recomposed wheel.
@@ -502,6 +638,26 @@ def recompose(wheel: Path, package: str, extension: Path, keep: tuple[str, ...],
             del items[path]
 
     items[extension.name] = extension.read_bytes()
+
+    if launcher is not None:
+        items[f"{launcher.module}.py"] = launcher.source(glibc_floor(extension))
+        entry = next((n for n in items if n.endswith(".dist-info/entry_points.txt")), None)
+        if entry is None:
+            raise BuildError(
+                f"{wheel.name} declares no console scripts, so there is no `{launcher.command}` "
+                f"to route through the guard. Either the pyproject lost its [project.scripts] "
+                f"block or this launcher names a command that was never there."
+            )
+        text = items[entry].decode()
+        pattern = rf"^{re.escape(launcher.command)} = .*$"
+        if not re.search(pattern, text, flags=re.M):
+            raise BuildError(
+                f"{wheel.name} has no `{launcher.command} = ...` entry point to repoint. Shipping "
+                f"past this would leave the command going straight to the compiled module, which "
+                f"is the failure this guard exists for."
+            )
+        items[entry] = re.sub(pattern, f"{launcher.command} = {launcher.module}:main",
+                              text, count=1, flags=re.M).encode()
 
     meta = next((n for n in items if n.endswith(".dist-info/WHEEL")), None)
     record = next((n for n in items if n.endswith(".dist-info/RECORD")), None)
@@ -531,7 +687,8 @@ def recompose(wheel: Path, package: str, extension: Path, keep: tuple[str, ...],
 # -- the gate ---------------------------------------------------------------------------------
 
 
-def leak_check(wheel: Path, package: str, allowed: tuple[str, ...]) -> list[str]:
+def leak_check(wheel: Path, package: str, allowed: tuple[str, ...],
+               launcher: "Launcher | None" = None) -> list[str]:
     """Fail a wheel that contains source it was not supposed to.
 
     The gate the whole exercise reduces to. It runs on the artefact rather than the tree it was
@@ -545,11 +702,17 @@ def leak_check(wheel: Path, package: str, allowed: tuple[str, ...]) -> list[str]
         wheel: The wheel to inspect.
         package: The importable package name.
         allowed: Sidecar patterns, relative to the package directory.
+        launcher: The console-script guard, permitted by name. It sits at the top level rather
+            than under the package, and it is plumbing rather than product: an import, a call and
+            a message. Permitted explicitly so that adding one cannot be how a real leak gets
+            through, and so a wheel built without one still refuses every ``.py``.
 
     Returns:
         Offending archive paths, empty when the wheel is clean.
     """
     permitted = {f"{package}/{pattern}" for pattern in allowed}
+    if launcher is not None:
+        permitted.add(f"{launcher.module}.py")
     leaks: list[str] = []
     with zipfile.ZipFile(wheel) as zf:
         for info in zf.infolist():
@@ -1203,8 +1366,10 @@ def main(argv: list[str] | None = None) -> int:
         # siar-build's runtime modules are. What has to stay readable is the local_web deck, which
         # is served to a browser and was never Python.
         a_keep = ("local_web/*",)
-        a_wheel = recompose(build_wheel(siarapp.path), "siarapp", a_so, a_keep, target.wheel)
-        leaks = leak_check(a_wheel, "siarapp", a_keep)
+        a_launch = Launcher("_siar_launch_siarapp", "siar-app", "siarapp.cli.main:main")
+        a_wheel = recompose(build_wheel(siarapp.path), "siarapp", a_so, a_keep, target.wheel,
+                            a_launch)
+        leaks = leak_check(a_wheel, "siarapp", a_keep, a_launch)
         if leaks:
             raise BuildError(f"{a_wheel.name} carries source it should not:\n  "
                              + "\n  ".join(leaks[:20]))
@@ -1218,8 +1383,10 @@ def main(argv: list[str] | None = None) -> int:
         patch_siarbuild_pyproject(siarbuild.path, {key: b_wheel.name}, {key: a_wheel.name},
                                   args.base_url)
         s_keep = (*runtime, "template/*.tmpl")
-        s_wheel = recompose(build_wheel(siarbuild.path), "siarbuild", s_so, s_keep, target.wheel)
-        leaks = leak_check(s_wheel, "siarbuild", s_keep)
+        s_launch = Launcher("_siar_launch_siarbuild", "siar-build", "siarbuild.cli:main")
+        s_wheel = recompose(build_wheel(siarbuild.path), "siarbuild", s_so, s_keep, target.wheel,
+                            s_launch)
+        leaks = leak_check(s_wheel, "siarbuild", s_keep, s_launch)
         if leaks:
             raise BuildError(f"{s_wheel.name} carries source it should not:\n  "
                              + "\n  ".join(leaks[:20]))
@@ -1234,11 +1401,14 @@ def main(argv: list[str] | None = None) -> int:
         # No sidecar of any kind, and it is the only one of the three with none: siar-db reads no
         # file relative to its own `__file__` -- no templates, no served pages, nothing copied into
         # a generated package. Its PNG writer is zlib and struct, so even the pictures are code.
-        # An empty keep list means leak_check refuses any .py at all, which is the strictest the
-        # gate goes.
+        # An empty keep list means leak_check refuses every .py in the package, which is the
+        # strictest the gate goes; the launcher beside it is permitted by name and holds no
+        # product.
         d_keep: tuple[str, ...] = ()
-        d_wheel = recompose(build_wheel(siardb.path), "siardb", d_so, d_keep, target.wheel)
-        leaks = leak_check(d_wheel, "siardb", d_keep)
+        d_launch = Launcher("_siar_launch_siardb", "siar-db", "siardb.cli.main:main")
+        d_wheel = recompose(build_wheel(siardb.path), "siardb", d_so, d_keep, target.wheel,
+                            d_launch)
+        leaks = leak_check(d_wheel, "siardb", d_keep, d_launch)
         if leaks:
             raise BuildError(f"{d_wheel.name} carries source it should not:\n  "
                              + "\n  ".join(leaks[:20]))
