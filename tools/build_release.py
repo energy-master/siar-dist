@@ -162,12 +162,20 @@ TARGETS: dict[str, Target] = {
 
 #: Nuitka flags shared by every package.
 #:
+#: ``assume-yes-for-downloads`` is about a machine that has never built before. Nuitka fetches a
+#: ccache on first use and *asks* before it does; :func:`run` closes stdin on purpose, so the
+#: question is asked into a closed pipe and the build dies on a fresh builder with a prompt nobody
+#: could have answered. Every shipping platform needs its own machine — Nuitka does not
+#: cross-build — so "first build on this box" is a case this script meets routinely rather than
+#: once. What it downloads is a compiler cache, not anything that ends up in a wheel.
+#:
 #: ``no_docstrings`` is the one worth explaining. Neither codebase reads ``__doc__`` at runtime —
 #: checked, not assumed — and both are documented to a standard that makes the docstrings worth
 #: more than the code to a reader: measured AUC figures, the failure modes each guard exists for,
 #: why one approach was abandoned for another. Compiling while shipping those would be leaving the
 #: commentary on the design in a binary that was built to withhold the design.
-NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output")
+NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output",
+                "--assume-yes-for-downloads")
 
 
 #: Tests that cannot be run against a compiled build, with the reason each is excused.
