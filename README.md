@@ -162,11 +162,24 @@ siar-db's workspace under `$SIARDB_HOME` and the local indexes all live outside 
 
 ## Remove
 
+If you installed the whole download, the tool is called **`siar`** — one install, four
+executables. Uninstalling `siar-app` or `siar-db` by name does nothing, because neither is a tool
+you installed:
+
 ```bash
-uv tool uninstall siar-app       # tool install
-uv tool uninstall siar-build
+uv tool uninstall siar
+```
+
+If you installed one program on its own, uninstall that one by name instead:
+
+```bash
+uv tool uninstall siar-app       # or siar-build, or siar-db
 rm -rf .venv                     # venv install (deactivate first)
 ```
+
+Check it is gone with `uv tool list`. To be certain the next install downloads afresh rather than
+reusing what uv already has for these URLs, follow it with `uv cache clean` — see
+[Update](#update) for why that matters here.
 
 That removes the programs and leaves your work alone. What stays behind, to delete by hand only if
 you mean it:
@@ -175,6 +188,7 @@ you mean it:
 |---|---|
 | `~/.siar-app/` | the cached IDent Dynamics token, downloaded algorithm bundles, imported models |
 | `~/.siar-build/` | this machine's build index and its societies' configuration |
+| `~/.siar-db/` | the structure database, per-run output folders and the grid cache |
 | your `--out` folders | the scans, societies and models themselves — the actual work |
 
 ---
