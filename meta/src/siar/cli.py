@@ -1,10 +1,10 @@
 # Vixen Intelligence c.2026
-"""``siar`` — the front door of a download that installs two programs.
+"""``siar`` — the front door of a download that installs three programs.
 
 Two commands, and neither of them does any work on audio. ``siar readme`` puts the manual for the
-download *as a whole* in a browser, and ``siar version`` says which halves are actually installed
-and at what version. Everything else a client came for is ``siar-app`` and ``siar-build``, which
-this distribution puts on the PATH alongside it.
+download *as a whole* in a browser, and ``siar version`` says which parts are actually installed
+and at what version. Everything else a client came for is ``siar-app``, ``siar-build`` and
+``siar-db``, which this distribution puts on the PATH alongside it.
 
 **Why the manual is not a file in this package.** ``pyproject.toml`` names the repository's
 README as the project's long description, so a wheel already carries the whole of it in its
@@ -29,9 +29,10 @@ import tempfile
 __all__ = ["DISTRIBUTIONS", "main", "readme_markdown", "render_page"]
 
 #: What a full install of this download consists of, in the order ``siar version`` reports them.
-#: brahma-intelligence is included because it is siar-build's engine and the one dependency a
-#: client never asked for by name — when an install goes wrong it is usually the missing row.
-DISTRIBUTIONS = ("siar", "siar-app", "siar-build", "brahma-intelligence")
+#: brahma-intelligence is included because it is the engine under siar-build and siar-db alike,
+#: and the one dependency a client never asked for by name — when an install goes wrong it is
+#: usually the missing row.
+DISTRIBUTIONS = ("siar", "siar-app", "siar-build", "siar-db", "brahma-intelligence")
 
 #: The page the rendered manual is written into. Deliberately plain and deliberately inline: this
 #: is opened over ``file://`` on a machine that may have no network at all, so a stylesheet from
@@ -199,8 +200,9 @@ def main(argv: list[str] | None = None) -> int:
     """
     ap = argparse.ArgumentParser(
         prog="siar",
-        description="The SIaR Framework. `siar-app` runs models; `siar-build` breeds them. "
-                    "This command is the manual for both, and a check on what is installed.",
+        description="The SIaR Framework. `siar-app` runs models; `siar-build` breeds them; "
+                    "`siar-db` scans a corpus into a queryable structure database. This command "
+                    "is the manual for all three, and a check on what is installed.",
     )
     sub = ap.add_subparsers(dest="command", metavar="COMMAND")
 

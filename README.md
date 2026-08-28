@@ -10,6 +10,8 @@ download intsalls:
 | application | what it does |
 |---|---|
 | `siar-app` | run models from vixen intelligence and/or your proprietary models built using siar-build |
+| `siar-build` | breed a society of bots that searches for your target, and package it as a model |
+| `siar-db` | scan a corpus into a queryable structure database, then group and review what is in it |
 | `siar-lib` | our proprietart machine learning framework for non linear signals |
 
 
@@ -17,7 +19,9 @@ download intsalls:
 >here is compiled.
 
 All output can be viewed by simply dropping the output folder into Ident dynamcis at www.goident.ai as well as being incorporated into
-exisitng data pipelines. Both siar-app and siar-build have a comprehensive README documenting their full functionality.
+exisitng data pipelines. `siar-app run` writes such a folder directly, and `siar-db scan --idout`
+writes one beside its own output. siar-app, siar-build and siar-db each have a comprehensive
+README documenting their full functionality.
 
 > The full manual ships inside each install. `siar-app readme` opens siar-app's in a browser and
 > `siar-build readme` opens siar-build's. This README is how to get started, and a reference for
@@ -51,11 +55,11 @@ BASE=https://raw.githubusercontent.com/energy-master/siar-dist/main/dist
 SIAR=$BASE/siar-0.1.0-py3-none-any.whl
 APP=$BASE/siar_app-0.7.0-cp313-cp313-linux_x86_64.whl
 BUILD=$BASE/siar_build-0.2.0-cp313-cp313-linux_x86_64.whl
+DB=$BASE/siar_db-0.1.0-cp313-cp313-linux_x86_64.whl
 ```
 
 See [Platforms](#platforms) to see which platforms have builds. `$SIAR` is the same file whatever
-you are on — it holds no compiled code, and names the right pair of wheels for the machine it
-lands on.
+you are on — it holds no compiled code, and names the right wheels for the machine it lands on.
 
 ### The whole download, one command
 
@@ -63,9 +67,9 @@ lands on.
 uv tool install --python 3.13 "$SIAR"
 ```
 
-That puts `siar-app`, `siar-build` and `siar` on the PATH, in one environment with its own 3.13.
-It is the install to want: `siar-build verify`, `siar-build scan` and `siar-build soc scan` each
-need `siar-app` **on the PATH**, and this is what satisfies them.
+That puts `siar-app`, `siar-build`, `siar-db` and `siar` on the PATH, in one environment with its
+own 3.13. It is the install to want: `siar-build verify`, `siar-build scan` and `siar-build soc
+scan` each need `siar-app` **on the PATH**, and this is what satisfies them.
 
 ```bash
 siar readme          # this page, in a browser, offline
@@ -88,7 +92,15 @@ uv tool install --python 3.13 "$APP"
 uv tool install --python 3.13 "$BUILD"
 ```
 
-**A virtual environment**, when you want the two importable as libraries rather than only as
+**Surveying a corpus, with no model yet.** `siar-db` needs neither of the others: it finds
+structure with a bank of cellular automata rather than with a bred model, so it is what to reach
+for when the question is "what is in this folder" rather than "where is my target in it".
+
+```bash
+uv tool install --python 3.13 "$DB"
+```
+
+**A virtual environment**, when you want them importable as libraries rather than only as
 commands:
 
 ```bash
@@ -105,6 +117,7 @@ siar version         # every part of the download, and whether it is installed
 siar readme          # this manual, rendered in a browser, offline
 siar-app --help
 siar-build --help
+siar-db --help
 ```
 
 ---
@@ -326,14 +339,69 @@ immediately in IDent dynamics.
 
 ---
 
+## Quick start - Survey a corpus with siar-db
+
+siar-app and siar-build both answer "where is my target". siar-db answers the question that comes
+before it: **what is in this folder at all.** It runs a bank of fuzzy cellular automata over every
+recording, draws an edge around everything that is structured rather than noise, and writes every
+one of those edges to a SQLite database. Nothing is classified and nothing is named — the
+interesting question is then asked of the database rather than of a detector.
+
+```bash
+# 1. scan a folder of recordings, using every core but two
+siar-db scan /data/rsa_stream --dataset rsa_stream -j -2
+
+# 2. see what it found
+siar-db query --run 1
+
+# 3. narrow it to the structures worth looking at
+siar-db select --run 1 --min-dur 0.5 --f-low 2000 --f-high 8000
+
+# 4. cluster that set into recurring families
+siar-db embed && siar-db group
+
+# 5. write a folder per family, with a picture of every member
+siar-db print --out ./groups
+```
+
+`select`, `group` and `print` are one chain and each step stores its result, so you can re-print at
+a wider margin without re-clustering, and re-cluster at a lower threshold without re-reading a byte
+of audio. `siar-db view` says what is currently selected and how it grouped.
+
+### Into IDent Dynamics
+
+```bash
+siar-db scan /data/rsa_stream --out ./run1 --idout
+```
+
+`--idout` writes `./run1/ident` — the recordings, a sidecar of boxes per rule per recording, and a
+lane thumbnail each. Drop that folder into IDent Dynamics and every structure is drawn over a live
+spectrogram, with a toggle per rule so you can see which of the automata found what. The audio is
+copied into it, so the folder is self-contained and roughly doubles the disk the corpus takes.
+
+Everything else lives under `$SIARDB_HOME` (default `~/.siar-db`): the database, the per-run output
+folders and the cache. `siar-db info` prints the paths.
+
+> Unlike the other two, siar-db has no `readme` command — its manual is the README in its own
+> repository rather than a copy carried in the wheel.
+
+---
+
 ## Platforms
 
-| platform | wheels |
-|---|---|
-| Linux x86_64 (glibc) | ✅ published |
-| macOS 11+ arm64 (Apple Silicon) | ✅ published|
-| macOS x86_64 (Intel) | on request |
-| Windows x86_64 | ✅ published — command line only |
+| platform | siar-app | siar-build | siar-db |
+|---|---|---|---|
+| Linux x86_64 (glibc) | ✅ published | ✅ published | ✅ published |
+| macOS 11+ arm64 (Apple Silicon) | ✅ published | ✅ published | not yet built |
+| macOS x86_64 (Intel) | on request | on request | on request |
+| Windows x86_64 | ✅ published — command line only | ✅ published — command line only | not yet built |
+
+**A platform is only in the one-command install once every column is filled.** Nuitka does not
+cross-build, so each row is a machine somebody has to run the build on, and the columns are filled
+on different days. `siar` — the wheel that installs all of it — names only the platforms that have
+the complete set, so a machine with two of the three fails as "no wheel for this platform" rather
+than installing part of the download and breaking on the missing URL. The individual wheels above
+still install on their own wherever they are published.
 
 **What "command line only" excludes, and why it is said here rather than discovered.** On Windows
 `siar-app run`, `siar-app scan` and siar-build's pipeline all work. **`siar-build soc` — the
@@ -768,8 +836,68 @@ password rather than using this box's token — publishing is a person's act, no
 
 ---
 
+## siar-db
+
+```
+siar-db [--db PATH] <command> [options]
+```
+
+`--db PATH` works on every command and overrides the default database.
+
+| command | what it does |
+|---|---|
+| `siar-db scan FOLDER` | run the automaton bank over every recording under `FOLDER` and fill the database |
+| `siar-db query` | figures for one scan, one recording or one corpus |
+| `siar-db select` | narrow the database to a working set and store it under a name |
+| `siar-db group` | cluster a stored selection into named similarity families |
+| `siar-db print --out DIR` | write a folder per family of a stored grouping |
+| `siar-db view` | what is currently selected, and how it grouped |
+| `siar-db clear` | forget a stored selection or grouping |
+| `siar-db embed` | compute the similarity vectors `group` needs |
+| `siar-db runs` | list scans, newest first |
+| `siar-db info` | version, workspace paths, machine, and what is in the database |
+
+### `siar-db scan FOLDER`
+
+| option | meaning |
+|---|---|
+| `--dataset NAME` | name to register the corpus under (default: the folder's name) |
+| `--limit N` | stop after N files, for a trial run |
+| `--out DIR` | where PNGs and the report go (default `$SIARDB_HOME/runs/run_NNNN`) |
+| `--idout` | also write `<out>/ident`, a folder to drop into IDent Dynamics. Copies the audio |
+| `--no-png` | skip rendering |
+| `--show-mask` | tint surviving cells as well as boxing them |
+| `-j, --nodes N` | worker processes. Negative leaves that many cores free; `1` runs inline |
+| `--bank NAMES` | which rules to run: `freq`, `time`, `sweep` (default `freq,time`) |
+| `--rule SPEC` | add a tuned rule, `[base:]gene=value,...`. Repeatable |
+| `--min-cells N` · `--min-frames N` · `--min-bins N` | a flood valve, not a size filter — raise only to stop a rule producing hundreds of thousands of objects per tile |
+| `--delta-t SECONDS` | time between frames; sets `--n-fft` and `--hop` to attain it. The grid flag to reach for |
+| `--sample-rate HZ` · `--fmin HZ` · `--fmax HZ` · `--bins N` | the band layout audio is resampled and analysed on |
+| `--n-fft N` · `--hop N` | override the window and hop derived from `--delta-t` |
+
+**The rule bank is additive.** Every detection is attributed to the rule that made it, so two
+rules agreeing on one object leaves two rows — that is corroboration, and collapsing it would
+destroy the one signal saying several independent local rules agreed. `scan` prints the bank
+before it starts and `query` reports the split by rule afterwards.
+
+**A rule has a minimum duration and it is the thing to check first** when a structure you can see
+is not being found. A cell survives by having company at plus and minus one and two probe widths
+along time, so the default `time` probe cannot confirm anything shorter than about 1.6 s. Add
+`sweep` to the bank for briefer ones; `scan` prints every rule's minimum before it starts.
+
+### `siar-db select` · `group` · `print`
+
+One chain, and each step stores its result, so the next one argues with a set that is not moving
+underneath it. `select` takes the descriptor filters (`--min-dur`, `--f-low`, `--f-high`,
+`--min-cells` and the rest) and stores the rows that matched; `group` clusters that stored set at a
+cosine threshold; `print` renders a stored grouping to a folder per family with a picture of every
+member. Re-print at a wider margin without re-clustering, and re-cluster at a lower threshold
+without re-reading any audio.
+
+---
+
 ## Licence
 
-`siar-build` and `brahma-intelligence` are proprietary — Vixen Intelligence. The `siar-app` command
-line is MIT; the scanning algorithms it downloads are proprietary and licensed separately. Each
-wheel carries its own licence file, and `siar-app license` prints siar-app's.
+`siar-build`, `siar-db` and `brahma-intelligence` are proprietary — Vixen Intelligence. The
+`siar-app` command line is MIT; the scanning algorithms it downloads are proprietary and licensed
+separately. Each wheel carries its own licence file, and `siar-app license` prints siar-app's.

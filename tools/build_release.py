@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # Vixen Intelligence c.2026
-"""Build the public siar-dist download from the current commits of siar-build, siar-app and brahma.
+"""Build the public siar-dist download from the current commits of the four private repositories.
 
-This repository is the only public face of a product whose three source repositories are private
-and staying that way. What crosses the line is compiled: each package is put through Nuitka into a
+siar-app runs models, siar-build breeds them, siar-db scans a corpus into a queryable structure
+database, and brahma-intelligence is the engine under the last two. This repository is the only
+public face of a product whose four source repositories are private and staying that way. What crosses the line is compiled: each package is put through Nuitka into a
 single native extension module, and the wheels here contain that ``.so`` and no statements.
 
 Run it, and ``dist/`` holds what a client installs::
@@ -25,13 +26,14 @@ also turned out to be undemanding — brahma's 53 modules compile in thirteen se
 experiment.
 
 **The sidecar directory, and why it is not a leak.** Nuitka gives a compiled package a synthetic
-``__file__`` of ``<dir>/<package>/__init__.py`` — a path that need not exist, but *may*. All three
-packages read files relative to it: siar-build loads ``template/*.tmpl`` and copies its own
+``__file__`` of ``<dir>/<package>/__init__.py`` — a path that need not exist, but *may*. Three of
+the four read files relative to it: siar-build loads ``template/*.tmpl`` and copies its own
 ``rms.py`` and ``scanner_core.py`` into every model it packages, and it copies eleven modules out
 of brahma for the same reason; siar-app opens the pages under ``local_web/`` that it serves to a
-browser. So each wheel ships a directory of that name beside the ``.so`` holding exactly those
-files, and every ``Path(__file__).parent / ...`` in any of the three resolves without a line of
-any of them being changed.
+browser. So those wheels ship a directory of that name beside the ``.so`` holding exactly those
+files, and every ``Path(__file__).parent / ...`` in any of them resolves without a line being
+changed. siar-db is the exception and needs no such directory: it reads no file relative to
+itself, so its permitted list is empty and the leak check refuses every ``.py`` in its wheel.
 
 siar-app's are HTML, CSS and JavaScript, which a browser was always going to be handed and which
 compilation was never about. The thirteen Python files are readable too, and that is not a
@@ -80,7 +82,21 @@ DIST = ROOT / "dist"
 
 DEFAULT_SIARBUILD = Path("/home/vixen/apps/siar-builder")
 DEFAULT_SIARAPP = Path("/home/vixen/apps/siar-app")
+DEFAULT_SIARDB = Path("/home/vixen/apps/siar-db")
 DEFAULT_BRAHMA = Path("/home/vixen/apps/brahma_lib_py")
+
+#: The programs a full install puts on the PATH, and the wheel-name prefix each is published
+#: under. brahma is not here: it is an engine nobody installs on purpose, has no console script,
+#: and is pulled in as a dependency of the three that do.
+#:
+#: The meta wheel requires a platform to have ALL of these before it will name it, so adding a
+#: row here is what makes a fourth program part of the download rather than a wheel that happens
+#: to be sitting in dist/.
+PRODUCTS: tuple[tuple[str, str], ...] = (
+    ("siar-app", "siar_app"),
+    ("siar-build", "siar_build"),
+    ("siar-db", "siar_db"),
+)
 
 #: The one package built from *this* repository. ``siar`` holds no product — a dependency on each
 #: half and, under its own name, their console scripts — so unlike the other three there is
@@ -144,7 +160,7 @@ TARGETS: dict[str, Target] = {
     ),
 }
 
-#: Nuitka flags shared by both packages.
+#: Nuitka flags shared by every package.
 #:
 #: ``no_docstrings`` is the one worth explaining. Neither codebase reads ``__doc__`` at runtime —
 #: checked, not assumed — and both are documented to a standard that makes the docstrings worth
@@ -156,8 +172,7 @@ NUITKA_FLAGS = ("--python-flag=no_docstrings", "--no-pyi-file", "--remove-output
 
 #: Tests that cannot be run against a compiled build, with the reason each is excused.
 #:
-#: Keyed by suite, because there are two of them and an excuse earned by one package's test is
-#: not an excuse for another's. Every entry is one limitation of the *technique*, not of the
+#: Keyed by suite, because an excuse earned by one package's test is not an excuse for another's. Every entry is one limitation of the *technique*, not of the
 #: wheel, and each is a substitution the compiled call site cannot see.
 #:
 #: siar-build's is a test
@@ -592,6 +607,65 @@ def url_requirements(name: str, wheels: dict[str, str], base_url: str) -> str:
     )
 
 
+def replace_brahma_requirement(text: str, brahma: dict[str, str], base_url: str,
+                               project: str) -> str:
+    """Swap a project's ``brahma-intelligence @ git+...`` line for per-platform wheel URLs.
+
+    Shared by siar-build and siar-db, which depend on brahma identically and would otherwise
+    carry two copies of this substitution -- and two copies is how one of them comes to ship a
+    wheel still pointing at a private repository while the other is fixed.
+
+    Args:
+        text: The project's ``pyproject.toml``.
+        brahma: ``{platform key: wheel filename}`` for every platform built this run.
+        base_url: Where those filenames are served from.
+        project: Whose file this is, for the error message.
+
+    Returns:
+        The patched text.
+
+    Raises:
+        BuildError: If the line is absent, which means the pyproject has been restructured and
+            this substitution would quietly ship a wheel that still depends on a private
+            repository.
+    """
+    hard = r'^\s*"brahma-intelligence @ [^"]*",\n'
+    if not re.search(hard, text, flags=re.M):
+        raise BuildError(
+            f"{project}'s pyproject has no `brahma-intelligence @ ...` line to replace. Rather "
+            f"than ship a wheel that still points at the private repository, this build stops."
+        )
+    replacement = (
+        "    # Compiled from a private source repository by siar-dist/tools/build_release.py and\n"
+        "    # served as native wheels. One URL per platform, guarded by mutually exclusive\n"
+        "    # markers: a direct reference cannot select a wheel by tag the way an index would,\n"
+        "    # and an index cannot be named from this file in a way pip would read.\n"
+        + url_requirements("brahma-intelligence", brahma, base_url)
+    )
+    return re.sub(hard, replacement, text, count=1, flags=re.M)
+
+
+def patch_siardb_pyproject(tree: Path, brahma: dict[str, str], base_url: str) -> None:
+    """Replace siar-db's one git dependency with per-platform wheel URLs.
+
+    siar-db has the simplest metadata of the three: brahma is its only private reference, and
+    numpy, scipy and soundfile all resolve from PyPI unchanged.
+
+    Args:
+        tree: The exported siar-db tree, modified in place.
+        brahma: ``{platform key: wheel filename}`` for brahma.
+        base_url: Where those filenames are served from.
+
+    Raises:
+        BuildError: See :func:`replace_brahma_requirement`.
+    """
+    path = tree / "pyproject.toml"
+    path.write_text(
+        replace_brahma_requirement(path.read_text(encoding="utf-8"), brahma, base_url, "siar-db"),
+        encoding="utf-8",
+    )
+
+
 def patch_siarbuild_pyproject(tree: Path, brahma: dict[str, str], siarapp: dict[str, str],
                               base_url: str) -> None:
     """Replace siar-build's two git dependencies with per-platform wheel URLs.
@@ -614,22 +688,8 @@ def patch_siarbuild_pyproject(tree: Path, brahma: dict[str, str], siarapp: dict[
             private repository.
     """
     path = tree / "pyproject.toml"
-    text = path.read_text(encoding="utf-8")
-
-    hard = r'^\s*"brahma-intelligence @ [^"]*",\n'
-    if not re.search(hard, text, flags=re.M):
-        raise BuildError(
-            "siar-build's pyproject has no `brahma-intelligence @ ...` line to replace. Rather "
-            "than ship a wheel that still points at the private repository, this build stops."
-        )
-    replacement = (
-        "    # Compiled from a private source repository by siar-dist/tools/build_release.py and\n"
-        "    # served as native wheels. One URL per platform, guarded by mutually exclusive\n"
-        "    # markers: a direct reference cannot select a wheel by tag the way an index would,\n"
-        "    # and an index cannot be named from this file in a way pip would read.\n"
-        + url_requirements("brahma-intelligence", brahma, base_url)
-    )
-    text = re.sub(hard, replacement, text, count=1, flags=re.M)
+    text = replace_brahma_requirement(path.read_text(encoding="utf-8"), brahma, base_url,
+                                      "siar-build")
 
     extra = r'^run = \[\s*"siar-app @ [^"]*",?\s*\]\n'
     if not re.search(extra, text, flags=re.M):
@@ -681,50 +741,55 @@ def published_wheels(prefix: str) -> dict[str, str]:
     return found
 
 
-def meta_platforms() -> dict[str, tuple[str, str]]:
+def meta_platforms() -> dict[str, dict[str, str]]:
     """The platforms a full install can actually be resolved on.
 
-    A platform counts only when **both** halves are published for it. The alternative is a meta
-    wheel whose marker matches a machine, pulls in the half that exists and fails on the URL for
-    the half that does not — which reads to a client as a broken download rather than as a
-    platform that has not shipped yet.
+    A platform counts only when **every** program in :data:`PRODUCTS` is published for it. The
+    alternative is a meta wheel whose marker matches a machine, pulls in the programs that exist
+    and fails on the URL for the one that does not — which reads to a client as a broken download
+    rather than as a platform that has not shipped yet.
+
+    That rule is why adding siar-db to :data:`PRODUCTS` immediately drops every platform whose
+    siar-db wheel has not been built. It is the intended behaviour and it is loud: the note below
+    names the platform and the missing program, so "macOS has gone quiet" is a line in the build
+    log rather than a client's failed install.
 
     Returns:
-        ``{platform key: (siar-app wheel, siar-build wheel)}``.
+        ``{platform key: {distribution name: wheel filename}}``.
 
     Raises:
-        BuildError: If no platform has both, so there is nothing to build a meta wheel for.
+        BuildError: If no platform has all of them, so there is nothing to build a meta wheel for.
     """
-    apps = published_wheels("siar_app")
-    builds = published_wheels("siar_build")
-    both = {k: (apps[k], builds[k]) for k in sorted(set(apps) & set(builds))}
+    published = {name: published_wheels(prefix) for name, prefix in PRODUCTS}
+    complete = set.intersection(*(set(w) for w in published.values()))
+    anywhere = set.union(*(set(w) for w in published.values()))
 
-    for key in sorted(set(apps) ^ set(builds)):
-        half = "siar-app" if key in apps else "siar-build"
-        missing = "siar-build" if key in apps else "siar-app"
-        print(f"  note: {key} has {half} but no {missing} — left out of the meta wheel, so the "
-              f"install fails\n        as 'no wheel for this platform' rather than half-way "
+    for key in sorted(anywhere - complete):
+        missing = [name for name in published if key not in published[name]]
+        print(f"  note: {key} is missing {', '.join(missing)} — left out of the meta wheel, so "
+              f"the install fails\n        as 'no wheel for this platform' rather than half-way "
               f"through.")
-    if not both:
+    if not complete:
         raise BuildError(
-            "no platform in dist/ has both siar-app and siar-build, so a meta wheel would "
-            "resolve for nobody. Build a full release first."
+            "no platform in dist/ has all of " + ", ".join(n for n, _ in PRODUCTS)
+            + ", so a meta wheel would resolve for nobody. Build a full release first."
         )
-    return both
+    return {key: {name: published[name][key] for name, _ in PRODUCTS}
+            for key in sorted(complete)}
 
 
-def patch_meta_pyproject(tree: Path, platforms: dict[str, tuple[str, str]], base_url: str) -> None:
+def patch_meta_pyproject(tree: Path, platforms: dict[str, dict[str, str]], base_url: str) -> None:
     """Fill in the meta package's empty ``dependencies`` with per-platform wheel URLs.
 
     Args:
         tree: The copied ``meta/`` tree, modified in place.
-        platforms: ``{platform key: (siar-app wheel, siar-build wheel)}``.
+        platforms: ``{platform key: {distribution: wheel}}`` from :func:`meta_platforms`.
         base_url: Where ``dist/`` is served from.
 
     Raises:
         BuildError: If the empty block is not there, which means ``meta/pyproject.toml`` has been
-            restructured. Shipping past that would produce a wheel that depends on nothing: three
-            commands on the PATH, two of which import a package the install never fetched.
+            restructured. Shipping past that would produce a wheel that depends on nothing: four
+            commands on the PATH, three of which import a package the install never fetched.
     """
     path = tree / "pyproject.toml"
     text = path.read_text(encoding="utf-8")
@@ -736,9 +801,8 @@ def patch_meta_pyproject(tree: Path, platforms: dict[str, tuple[str, str]], base
             "ship a meta wheel that requires neither half, this build stops."
         )
     lines = "".join(
-        f'    "siar-app @ {base_url}/{app} ; {TARGETS[key].marker}",\n'
-        f'    "siar-build @ {base_url}/{build} ; {TARGETS[key].marker}",\n'
-        for key, (app, build) in platforms.items()
+        f'    "{name} @ {base_url}/{wheels[name]} ; {TARGETS[key].marker}",\n'
+        for key, wheels in platforms.items() for name, _ in PRODUCTS
     )
     text = re.sub(anchor, "dependencies = [\n" + lines + "]\n", text, count=1, flags=re.M)
     path.write_text(text, encoding="utf-8")
@@ -790,11 +854,11 @@ def build_meta(work: Path, platforms: dict[str, tuple[str, str]], base_url: str)
         scripts = next((n for n in zf.namelist() if n.endswith(".dist-info/entry_points.txt")), "")
         meta_text = zf.read(metadata).decode("utf-8") if metadata else ""
         script_text = zf.read(scripts).decode("utf-8") if scripts else ""
-    for needed in ("siar-app @", "siar-build @"):
-        if needed not in meta_text:
-            raise BuildError(f"{wheel.name} carries no `{needed}` requirement — it would install "
-                             f"three commands and none of the code behind two of them.")
-    for command in ("siar =", "siar-app =", "siar-build ="):
+    for name, _ in PRODUCTS:
+        if f"{name} @" not in meta_text:
+            raise BuildError(f"{wheel.name} carries no `{name} @` requirement — it would install "
+                             f"a command with none of the code behind it.")
+    for command in ("siar =", *(f"{name} =" for name, _ in PRODUCTS)):
         if command not in script_text:
             raise BuildError(f"{wheel.name} does not declare the `{command.split()[0]}` command. "
                              f"Naming all three is the whole reason this package exists.")
@@ -891,25 +955,33 @@ def verify(wheels: list[Path], workdir: Path, suites: dict[str, Path]) -> str:
     # present in the source tree, easy to drop in recomposition, and missed only at the moment a
     # client opens a browser.
     code = (
-        "import brahma_intelligence as b, siarbuild, siarapp, os;"
+        "import brahma_intelligence as b, siarbuild, siarapp, siardb, os;"
         "from brahma_intelligence import BrahmaModel, ClassificationReport, apply_model,"
         " evolve_metric;"
+        "from brahma_intelligence.ca import CAGenome, run as ca_run;"
         "from brahma_intelligence.store import Store;"
         "from siarbuild.docs import readme_markdown;"
         "from siarbuild.vendor import VENDORED, RUNTIME;"
         "from siarapp import docs as appdocs;"
         "from siarapp.cli.main import main;"
+        # siar-db's schema and its ident folder are both pure data structures that a compiled
+        # build could lose silently -- a table list and a format string are exactly the kind of
+        # module-scope constant worth reading back rather than assuming.
+        "from siardb.store.schema import SCHEMA_VERSION, TABLES;"
+        "from siardb.ident import SIDECAR_FORMAT;"
+        "from siardb.cli.main import main as dbmain;"
         "n = len(readme_markdown());"
         "m = len(appdocs.readme_markdown());"
         "assert os.path.isfile(appdocs.quickstart_path()), 'local_web sidecar missing';"
+        "assert len(TABLES) > 10 and SIDECAR_FORMAT, 'siar-db constants lost in compilation';"
         "print(f'brahma {b.__version__}, readme {n} chars, siar-app readme {m} chars,"
-        " local_web intact')"
+        " local_web intact, siar-db schema v{SCHEMA_VERSION}/{len(TABLES)} tables')"
     )
     summary = run([str(py), "-c", code]).strip()
     # The console scripts, because they are what a client types and they are the entry points that
     # have to survive compilation -- `python -m siarbuild` no longer can.
-    run([str(scripts / f"siar-build{suffix}"), "--help"])
-    run([str(scripts / f"siar-app{suffix}"), "--help"])
+    for name, _ in PRODUCTS:
+        run([str(scripts / f"{name}{suffix}"), "--help"])
 
     for name, tests in suites.items():
         # Selected by name with `-k`, not by node id with `--deselect`. A `--deselect` whose path
@@ -923,7 +995,11 @@ def verify(wheels: list[Path], workdir: Path, suites: dict[str, Path]) -> str:
         cmd = [str(py), "-m", "pytest", str(tests), "-q", "-p", "no:cacheprovider"]
         if excused:
             cmd += ["-k", " and ".join(f"not {node.split('::')[-1]}" for node, _ in excused)]
-        out = run(cmd, cwd=workdir)
+        # siar-db's conftest puts its own `src/` on sys.path so a developer tests what they are
+        # editing. The exported tree sits right beside these tests, so without this the run would
+        # import the source and report a green suite for code this build did not ship.
+        env = {**os.environ, "SIARDB_TEST_INSTALLED": "1"}
+        out = run(cmd, cwd=workdir, env=env)
         summary += f"; {name}: " + out.strip().splitlines()[-1]
     return summary
 
@@ -1034,6 +1110,7 @@ def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Build the siar-dist download.")
     ap.add_argument("--siar-build", type=Path, default=DEFAULT_SIARBUILD)
     ap.add_argument("--siar-app", type=Path, default=DEFAULT_SIARAPP)
+    ap.add_argument("--siar-db", type=Path, default=DEFAULT_SIARDB)
     ap.add_argument("--brahma", type=Path, default=DEFAULT_BRAHMA)
     ap.add_argument("--base-url", default=DEFAULT_BASE_URL,
                     help="where dist/ is served from; baked into siar-build's metadata")
@@ -1041,7 +1118,7 @@ def main(argv: list[str] | None = None) -> int:
                     help="build from working trees instead of HEAD, and say so in the manifest")
     ap.add_argument("--no-verify", action="store_true", help="skip the install-and-import check")
     ap.add_argument("--run-tests", action="store_true",
-                    help="also run siar-build's and siar-app's suites against the wheels (slow)")
+                    help="also run each program's suite against the wheels (slow)")
     ap.add_argument("--keep-work", action="store_true", help="leave the build directory behind")
     ap.add_argument("--meta-only", action="store_true",
                     help="build only the `siar` meta wheel, from the halves already in dist/. "
@@ -1092,7 +1169,8 @@ def main(argv: list[str] | None = None) -> int:
         brahma = export(args.brahma, work / "brahma", "brahma_lib_py", args.allow_dirty)
         siarapp = export(args.siar_app, work / "siar-app", "siar-app", args.allow_dirty)
         siarbuild = export(args.siar_build, work / "siar-build", "siar-build", args.allow_dirty)
-        release.sources = [brahma, siarapp, siarbuild]
+        siardb = export(args.siar_db, work / "siar-db", "siar-db", args.allow_dirty)
+        release.sources = [brahma, siarapp, siarbuild, siardb]
         for src in release.sources:
             print(f"  {src.name:<14} {src.commit[:12]}{'  (DIRTY)' if src.dirty else ''}")
 
@@ -1149,7 +1227,26 @@ def main(argv: list[str] | None = None) -> int:
         release.wheels.append(s_wheel.name)
         print(f"  {s_wheel.name}  leak check clean")
 
-        # After the three, because it is built from what is in dist/ and names them by URL.
+        print("\ncompiling siardb")
+        d_so = compile_package(siardb.path, "siardb", work / "obj-siardb",
+                               ("numpy", "scipy", "soundfile", "brahma_intelligence"))
+        patch_siardb_pyproject(siardb.path, {key: b_wheel.name}, args.base_url)
+        # No sidecar of any kind, and it is the only one of the three with none: siar-db reads no
+        # file relative to its own `__file__` -- no templates, no served pages, nothing copied into
+        # a generated package. Its PNG writer is zlib and struct, so even the pictures are code.
+        # An empty keep list means leak_check refuses any .py at all, which is the strictest the
+        # gate goes.
+        d_keep: tuple[str, ...] = ()
+        d_wheel = recompose(build_wheel(siardb.path), "siardb", d_so, d_keep, target.wheel)
+        leaks = leak_check(d_wheel, "siardb", d_keep)
+        if leaks:
+            raise BuildError(f"{d_wheel.name} carries source it should not:\n  "
+                             + "\n  ".join(leaks[:20]))
+        shutil.copy2(d_wheel, DIST / d_wheel.name)
+        release.wheels.append(d_wheel.name)
+        print(f"  {d_wheel.name}  leak check clean")
+
+        # After the four, because it is built from what is in dist/ and names them by URL.
         print("\nbuilding the meta wheel")
         m_platforms = meta_platforms()
         print("  resolves on: " + ", ".join(m_platforms))
@@ -1159,7 +1256,8 @@ def main(argv: list[str] | None = None) -> int:
         if not args.no_verify:
             print("\nverifying")
             suites = {"siar-build": siarbuild.path / "tests",
-                      "siar-app": siarapp.path / "tests"} if args.run_tests else {}
+                      "siar-app": siarapp.path / "tests",
+                      "siar-db": siardb.path / "tests"} if args.run_tests else {}
             release.verified = verify([DIST / n for n in release.wheels], work, suites)
             print(f"  {release.verified}")
 
@@ -1179,7 +1277,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  {m_wheel.name}  ({m_wheel.stat().st_size // 1024} KiB)")
         print("  RELEASE.json")
         print(f"\nInstall:\n"
-              f"  uv tool install --python 3.13 {args.base_url}/{m_wheel.name}   # both programs"
+              f"  uv tool install --python 3.13 {args.base_url}/{m_wheel.name}   # all of it"
               f"\n  pip install {args.base_url}/{a_wheel.name}   # siar-app on its own")
         if any(s.dirty for s in release.sources):
             print("\nNOTE: built from a dirty tree. RELEASE.json records it. Do not ship it.")

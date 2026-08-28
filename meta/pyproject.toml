@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "siar"
 version = "0.1.0"
-description = "The SIaR Framework — siar-app and siar-build, in one install."
+description = "The SIaR Framework — siar-app, siar-build and siar-db, in one install."
 readme = "README.md"
 requires-python = ">=3.13,<3.14"
 license = "LicenseRef-Proprietary"
@@ -22,13 +22,15 @@ dependencies = [
 ]
 
 [project.scripts]
-# The two delegated entries are the whole point of this package. `uv tool install` exposes only
-# the entry points of the distribution it was asked for, so naming siar-app and siar-build here
-# is what turns three installs into one. They are the same targets those wheels declare
-# themselves, reached through the same compiled modules; nothing is wrapped or re-implemented.
+# The three delegated entries are the whole point of this package. `uv tool install` exposes only
+# the entry points of the distribution it was asked for, so naming siar-app, siar-build and
+# siar-db here is what turns four installs into one. They are the same targets those wheels
+# declare themselves, reached through the same compiled modules; nothing is wrapped or
+# re-implemented.
 siar = "siar.cli:main"
 siar-app = "siarapp.cli.main:main"
 siar-build = "siarbuild.cli:main"
+siar-db = "siardb.cli.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
