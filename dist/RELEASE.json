@@ -31,7 +31,7 @@
       }
     },
     "linux-x86_64": {
-      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables; siar-build: 741 passed, 1 deselected in 81.35s (0:01:21); siar-app: 660 passed, 2 deselected in 16.98s; siar-db: 76 passed in 20.12s",
+      "verified": "brahma 0.1.0, readme 54379 chars, siar-app readme 62643 chars, local_web intact, siar-db schema v4/31 tables; siar-build: 741 passed, 1 deselected in 80.80s (0:01:20); siar-app: 660 passed, 2 deselected in 16.56s; siar-db: 109 passed in 27.73s",
       "sources": {
         "brahma_lib_py": {
           "commit": "fca314d95871dc9f2286efb36a63efaacf8d212a",
@@ -46,15 +46,15 @@
           "dirty": false
         },
         "siar-db": {
-          "commit": "1624db020b0fae18c26f7ed7bab37e627e74e65c",
+          "commit": "50990d6d389db5964b2c2d21845dae381f100039",
           "dirty": false
         }
       },
       "wheels": {
-        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "1a4e377aa78729ee78df7f648d564938635fe843964f8654c6b405785e94f3c3",
-        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "85f13a6e70d8aafe19761fa89f0c54284f869cc3c27999a4f8b30c8f8e07be80",
-        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "2494683f7aa85caa3763567ef30d44d4d7be14ef321766a856fdb14a8c4214ef",
-        "siar_db-0.1.0-cp313-cp313-linux_x86_64.whl": "646ce154727319a397f21ce9395ae2013ca4638f5c7fb04b8a183478c058cac3"
+        "brahma_intelligence-0.1.0-cp313-cp313-linux_x86_64.whl": "61a2e1a0911734113f752d05635cc96c51d686245cc081dc344c6c68c5b1c0d9",
+        "siar_app-0.7.0-cp313-cp313-linux_x86_64.whl": "f84196efad2b97435d79b385c35f514d46806a7cb5b42591126036b77dac0ab6",
+        "siar_build-0.2.0-cp313-cp313-linux_x86_64.whl": "1303c6b2d88a1ebe5ee16b74e26e7b0c9f10451260b06d649503aa21596dae44",
+        "siar_db-0.1.0-cp313-cp313-linux_x86_64.whl": "fd535b08a2bb9a30778f1e9f63c8983fdef906d3484844b27fbf8611fd7b5a57"
       }
     },
     "windows-x86_64": {
@@ -82,7 +82,7 @@
   },
   "meta": {
     "wheel": "siar-0.1.0-py3-none-any.whl",
-    "sha256": "62160d65af8b30677ef279fd5fc3398d512d7e450f055fa3825a85827cde9929",
+    "sha256": "f7559bbc1134b9994e5b4da6b6b4eba11296188c034ee405713acd51f3c5fea8",
     "resolves_on": [
       "darwin-arm64",
       "linux-x86_64"
