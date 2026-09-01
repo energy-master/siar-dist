@@ -969,6 +969,20 @@ cosine threshold; `print` renders a stored grouping to a folder per family with 
 member. Re-print at a wider margin without re-clustering, and re-cluster at a lower threshold
 without re-reading any audio.
 
+`select` and `list` also take `--shape` and `--rule`, and those are two different questions.
+`--rule` is which detector drew the box — `freq`, `time`, `sweep`, whatever the bank held. `--shape`
+is what the box turned out to look like, measured from the structure itself: `click`, `tonal`,
+`sweep`, `patch` or `blob`. A rule is tuned toward a kind of structure but is not a classifier, so
+every rule publishes every shape — a `time` scan of a sonar corpus returns tonals, patches, sweeps
+and blobs in one run — and "the tonals the sweep rule found" needs both flags. Repeat either for a
+set.
+
+One thing worth knowing about `click`: it means "shorter than 50 ms, and taller than it is wide".
+A scan's `--delta-t` sets the shortest structure that can exist — a one-frame box is one frame
+long — so a grid coarser than 50 ms can never produce one, whatever is in the audio. The default
+0.01 s is well inside it; `--delta-t 0.1`, five times the ceiling, is not. A corpus of clicks that
+reports no clicks is usually this and not the recordings.
+
 ---
 
 ## Licence
